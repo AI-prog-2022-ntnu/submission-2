@@ -222,3 +222,7 @@ dmypy.json
 cython_debug/
 
 .DS_STORE
+
+
+.py_env
+
