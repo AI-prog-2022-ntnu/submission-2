@@ -61,7 +61,6 @@ class BaseEnvironment:
         """
         pass
 
-
     @abstractmethod
     def get_observation_space_size(self) -> int:
         """
@@ -70,11 +69,27 @@ class BaseEnvironment:
         """
         pass
 
-
     @abstractmethod
     def get_action_space_size(self) -> int:
         """
         Returns the size of the action space for the environment
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_action_space_list(self) -> []:
+        """
+        Returns a list of all the possible actions in the environment
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_valid_action_space_list(self,
+                                    state: BaseState) -> [bool]:
+        """
+        Returns a list of bool values indicating witch of the get_action_space_list() actions are available
         :return:
         """
         pass

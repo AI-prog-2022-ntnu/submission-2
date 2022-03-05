@@ -16,5 +16,13 @@ class BaseState:
         pass
 
     @abstractmethod
-    def __eq__(self, other):
+    def __eq__(self,
+               other):
+        pass
+
+
+class GameBaseState(BaseState):
+
+    @abstractmethod
+    def current_player_turn(self):
         pass

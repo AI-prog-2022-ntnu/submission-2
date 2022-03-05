@@ -1,7 +1,7 @@
 import random
 
 from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState
+from enviorments.base_state import BaseState, GameBaseState
 
 import copy
 
@@ -13,7 +13,7 @@ class colors:
     # RESET = '\033[0;0m'
 
 
-class HexGameState(BaseState):
+class HexGameState(GameBaseState):
     '''
     boards are represented as vectors turned 34 degrees i.e.
         a
@@ -29,17 +29,34 @@ class HexGameState(BaseState):
     def __init__(self,
                  board):
         self.hex_board = board
-        self.player_1_turn = True
+        self.players_turn = 0
+
+    def change_turn(self):
+        self.players_turn = (self.players_turn + 1) % 2
+
+    def current_player_turn(self):
+        return self.players_turn
+        pass
 
     def get_as_vec(self) -> [float]:
-        pass
+        ret = []
+        for r in self.hex_board:
+            ret.extend(r)
+        return ret
+
+    def __hash__(self):
+        return hash(str(self.get_as_vec()))
+
+    def __eq__(self,
+               other):
+        return hash(self) == hash(other)
 
 
 def _make_hex_board(size: int):
     ret = []
     for _ in range(size):
-        # ret.append([random.randint(-1,1) for _ in range(size)])
-        ret.append([random.randint(-1, 1) for _ in range(size)])
+        # ret.append([random.randint(-1, 1) for _ in range(size)])
+        ret.append([0 for _ in range(size)])
 
     return ret
 
@@ -106,6 +123,10 @@ def _terminal_display_hex_board(hex_board: [[int]]):
             last = sym
             pass
 
+        if n == 0:
+            disp_r = colors.RED + "R" + colors.RESET + disp_r[1:-1] + colors.GREEN + "G" + colors.RESET
+        elif n == len(skewed_board) - 1:
+            disp_r = colors.GREEN + "G" + colors.RESET + disp_r[1:-1] + colors.RED + "R" + colors.RESET
         print(disp_r)
         if n != width - 1:
             print(padd_r)
@@ -114,17 +135,27 @@ def _terminal_display_hex_board(hex_board: [[int]]):
 def _get_connected_cells(x: int,
                          y: int,
                          board: [[int]]) -> [(int), (int)]:
-    idx_up_r = (x - 1, y)
-    idx_r = (x - 1, y - 1)
-    idx_down_r = (x, y + 1)
-    idx_down_l = (x + 1, y)
-    idx_l = (x + 1, y - 1)
-    idx_up_l = (x, y - 1)
+    # idx_up_r = (x - 1, y)
+    # idx_r = (x - 1, y - 1)
+    # idx_down_r = (x, y + 1)
+    # idx_down_l = (x + 1, y)
+    # idx_l = (x + 1, y - 1)
+    # idx_up_l = (x, y - 1)
+
+    # TODO: some of theese may be wrong
+    idx_up_r = (x, y - 1)
+    idx_r = (x + 1, y - 1)
+    idx_down_r = (x + 1, y)
+    idx_down_l = (x, y + 1)
+    idx_l = (x - 1, y + 1)
+    idx_up_l = (x - 1, y)
     tests = [idx_up_r, idx_r, idx_down_r, idx_down_l, idx_l, idx_up_l]
 
     valid = []
     upper_b = len(board[0])
+    # print()
     for test in tests:
+        # print(test)
         if test[0] < upper_b and test[0] >= 0 and test[1] < upper_b and test[1] >= 0:
             valid.append(test)
 
@@ -143,8 +174,12 @@ def _win_traverse(board: [[int]],
 
     # print("cheked", checked)
     # print("con", connected)
+    # print("node ", current_node)
     for node in connected:
-        # print("node v ",board[node[0]][node[1]])
+        # print("node v ", board[node[0]][node[1]])
+        # print(cur_node_v)
+        # print("chke", checked)
+        # print(board[node[0]][node[1]] == cur_node_v)
         if node not in checked and board[node[0]][node[1]] == cur_node_v:
             # print("traversing ", node)
             # print("traversing ",board[node[0]][node[1]])
@@ -159,7 +194,7 @@ def _win_traverse(board: [[int]],
 
 
 def _is_game_won(state: HexGameState,
-                 team_a: bool):
+                 team_0: bool):
     checked = []
     board = state.hex_board
 
@@ -167,7 +202,7 @@ def _is_game_won(state: HexGameState,
 
     win = False
 
-    if team_a:
+    if team_0:
         node_v = 1  # TODO: is BAD, fix
         term_nodes = [(n, b_size - 1) for n in range(b_size)]
         start_nodes = [(n, 0) for n in range(b_size)]
@@ -176,8 +211,11 @@ def _is_game_won(state: HexGameState,
         term_nodes = [(b_size - 1, n) for n in range(b_size)]
         start_nodes = [(0, n) for n in range(b_size)]
 
+    # print(start_nodes)
+    # print(term_nodes)
     for node in start_nodes:
         if board[node[0]][node[1]] == node_v:
+            # print(node)
             win = _win_traverse(board, checked, node, term_nodes)
 
         if win:
@@ -188,7 +226,7 @@ def _is_game_won(state: HexGameState,
 def _get_free_positions(state: HexGameState) -> [(int)]:
     ret = []
     for n, row in enumerate(state.hex_board):
-        for i, tile in enumerate(state.hex_board):
+        for i, tile in enumerate(row):
             if tile == 0:
                 ret.append((n, i))
 
@@ -199,24 +237,44 @@ class HexGameEnvironment(BaseEnvironment):
 
     def __init__(self,
                  board_size,
-                 player_1_value=1,
-                 player_2_value=- 1):
-        self.player_2_value = player_2_value
+                 player_0_value=1,
+                 player_1_value=- 1):
+        self.player_0_value = player_0_value
         self.player_1_value = player_1_value
         self.board_size = board_size
+        self._action_space_list = self.get_valid_actions(self.get_initial_state())
 
     def act(self,
             state: HexGameState,
-            action: (int,int),
+            action: (int, int),
             inplace=False) -> (BaseState, int, bool):
         next_s = copy.deepcopy(state) if not inplace else state
-        put_val = self.player_1_value if state.player_1_turn else self.player_2_value
-        x,y = action[0],action[1]
+        put_val = self.player_0_value if state.current_player_turn() == 0 else self.player_1_value
+        x, y = action[0], action[1]
+
+        if next_s.hex_board[x][y] != 0:
+            raise Exception("invalid move")
 
         next_s.hex_board[x][y] = put_val
-        next_s.player_1_turn ^= True
-        return next_s
+        next_s.change_turn()
 
+        # check if game is done
+        valid_actions = self.get_valid_actions(next_s)
+        is_board_full = len(valid_actions) <= 0
+        player_0_won = _is_game_won(next_s, team_0=True)
+        player_1_won = _is_game_won(next_s, team_0=False)
+
+        if player_0_won:
+            reward = 1
+        elif player_1_won:
+            reward = -1
+        elif is_board_full:
+            reward = 0
+        else:
+            reward = 0
+
+        done = is_board_full or player_0_won or player_1_won
+        return next_s, reward, done
 
     def get_valid_actions(self,
                           state):
@@ -237,11 +295,20 @@ class HexGameEnvironment(BaseEnvironment):
         green_w = _is_game_won(state, True)
         print("Red won: ", red_w)
         print("Green won: ", green_w)
+        print("stat vec: ", state.hex_board)
         pass
 
     def get_observation_space_size(self) -> int:
-        return self.board_size**2
+        return self.board_size ** 2
 
     def get_action_space_size(self) -> int:
-        return self.board_size**2
+        return self.board_size ** 2
 
+    def get_action_space_list(self) -> []:
+        return self._action_space_list
+
+    def get_valid_action_space_list(self,
+                                    state: BaseState) -> [bool]:
+        state_act = self.get_valid_actions(state)
+        all_act = self.get_action_space_list()
+        return [act in state_act for act in all_act]
