@@ -24,5 +24,13 @@ class BaseState:
 class GameBaseState(BaseState):
 
     @abstractmethod
+    def get_as_inverted_vec(self) -> [float]:
+        """
+        return the board inverted i.e. player 1 pos -> player 2 pos
+        :return:
+        """
+        pass
+
+    @abstractmethod
     def current_player_turn(self):
         pass

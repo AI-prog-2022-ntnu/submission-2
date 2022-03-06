@@ -13,6 +13,15 @@ class colors:
     # RESET = '\033[0;0m'
 
 
+def invert(x):
+    if x == -1:
+        return 1
+    if x == 1:
+        return -1
+    else:
+        return 0
+
+
 class HexGameState(GameBaseState):
     '''
     boards are represented as vectors turned 34 degrees i.e.
@@ -42,6 +51,26 @@ class HexGameState(GameBaseState):
         ret = []
         for r in self.hex_board:
             ret.extend(r)
+        return ret
+
+    def get_as_inverted_vec(self) -> [float]:
+        ret = []
+        inverted_board = copy.deepcopy(self.hex_board)
+        axis_size = len(self.hex_board)
+
+        for x in range(axis_size):
+            for y in range(axis_size):
+                inverted_board[x][y] = invert(self.hex_board[y][x])
+
+        # print(inverted_board)
+
+        # for row in self.hex_board:
+        #     nr = [invert(x) for x in reversed(row)]
+        #     inverted_board.append(nr)
+
+        for r in inverted_board:
+            ret.extend(r)
+
         return ret
 
     def __hash__(self):
@@ -213,7 +242,9 @@ def _is_game_won(state: HexGameState,
 
     # print(start_nodes)
     # print(term_nodes)
+    # print(node_v)
     for node in start_nodes:
+        # print(node, board[node[0]][node[1]])
         if board[node[0]][node[1]] == node_v:
             # print(node)
             win = _win_traverse(board, checked, node, term_nodes)
@@ -253,6 +284,9 @@ class HexGameEnvironment(BaseEnvironment):
         x, y = action[0], action[1]
 
         if next_s.hex_board[x][y] != 0:
+            print("move", action)
+            print("from s", next_s)
+            self.display_state(next_s)
             raise Exception("invalid move")
 
         next_s.hex_board[x][y] = put_val

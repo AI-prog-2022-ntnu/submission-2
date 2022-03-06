@@ -3,9 +3,11 @@ import time
 
 import numpy as np
 import torch.cuda
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 from enviorments.hex.hex_game import HexGameEnvironment
-from rl_agent.rl_agent import MonteCarloTreeSearchAgent
+from rl_agent.rl_agent import MonteCarloTreeSearchAgent, NeuralNetwork
 
 import os
 
@@ -43,20 +45,45 @@ import os
 
 # print(a)
 
-env = HexGameEnvironment(4)
+env = HexGameEnvironment(5)
 agent = MonteCarloTreeSearchAgent(
-    num_rollouts=500,
+    num_rollouts=2000,
     environment=env
 )
 
 # print(torch.cuda.is_available())
 # agent.run_episode()
 
-agent.train_n_episodes(10)
+model_fp = "saved_models/model_5x5"
+# agent.load_model_from_fp(model_fp)
+# agent.train_n_episodes(10)
+agent.display = True
+agent.train_n_episodes(100, model_fp)
+
+# agent.train_n_episodes(10, model_fp)
+
+plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
+plot.get_figure().savefig("out.png")
+
+# agent.debug = True
+# agent.display = True
+# agent.train_n_episodes(5)
+# agent.play_against_human()
 
 # init_s = env.get_initial_state()
 # init_s.hex_board = [[1, 1, -1], [1, 1, -1], [-1, -1, 1]]
+
 # init_s.hex_board = [[1, -1, -1, 1], [-1, 1, 1, -1], [1, -1, 0, -1], [-1, 1, 1, 1]]
+# init_s.get_as_inverted_vec()
+# env.display_state(init_s)
+
+# inverted
+# init_s.hex_board = [[-1, 1, -1, 1], [1, -1, 1, -1], [1, -1, 0, -1], [-1, 1, 1, -1]]
+# env.display_state(init_s)
+
+
+# print(init_s.get_as_vec())
+# print(init_s.get_as_inverted_vec())
 # env.display_state(init_s)
 
 # init_s = env.get_initial_state()
