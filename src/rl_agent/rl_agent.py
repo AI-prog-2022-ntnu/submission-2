@@ -14,14 +14,7 @@ from enviorments.base_state import BaseState, GameBaseState
 # TODO: have not checked that this actually works at all
 from rl_agent.critic import Critic, CriticNeuralNet
 from rl_agent.mc_tree_search import MontecarloTreeSearch
-
-
-def generate_batch(data_list,
-                   batch_size):
-    batch = []
-    while len(batch) < batch_size:
-        batch.append(random.choice(data_list))
-    return batch
+from rl_agent.util import generate_batch, get_action_visit_map_as_target_vec
 
 
 class NeuralNetwork(nn.Module):
@@ -35,6 +28,8 @@ class NeuralNetwork(nn.Module):
             nn.Linear(100, 100),
             nn.ELU(),
             nn.Linear(100, out_s),
+            # nn.ReLU()  # <- DONT CHANGE
+            nn.Tanh()
             # nn.Softmax()
         )
 
@@ -51,7 +46,37 @@ class NeuralNetwork(nn.Module):
 
         soft_m = torch.div(e_pov_v, soft_m_sum.unsqueeze(1).expand(s1, s2)).float()
         soft_m_filtered = torch.multiply(soft_m, zero_inp)
+
+        # used_vals = torch.multiply(out, zero_inp)
+        # soft_m_sum = torch.sum(input=used_vals, dim=1)
+        # if soft_m_sum.float().sum() == 0:
+        #     soft_m = used_vals
+        # else:
+        #     s = out.size()
+        #     s1, s2 = s[0], s[1]
+        #     soft_m = torch.div(used_vals, soft_m_sum.unsqueeze(1).expand(s1, s2)).float()
+        # soft_m_sum = torch.where(soft_m != 0.0, soft_m_sum, 1.0)
+
+        # soft_m_filtered = torch.multiply(soft_m, used_vals)
+        # print("#############")
+        # print("zero inp mask", zero_inp)
+        # print("out vec", out)
+        # print("x", x)
+        # print("soft m filtered ", soft_m_filtered)
+        # print("soft m sum ", soft_m_sum)
+        # # print(soft_m_sum.unsqueeze(1).expand(s1, s2))
+        # print(soft_m)
+        # print("#############")
         return soft_m_filtered
+
+        # if torch.any(torch.isnan(soft_m_filtered)):
+        # print("#############")
+        # print(x)
+        # print(u)
+        # print(soft_m)
+        # print(out)
+        # print("#############")
+        # return soft_m_filtered
 
     def save_model(self,
                    fp):
@@ -84,6 +109,9 @@ class MonteCarloTreeSearchAgent:
         input_s = self.environment.get_observation_space_size()
         self.critic = Critic(input_s)
 
+        self.model.share_memory()
+        self.critic.model.share_memory()
+
     def load_model_from_fp(self,
                            fp):
         if path.exists(fp):
@@ -95,6 +123,9 @@ class MonteCarloTreeSearchAgent:
             critic_fp = fp + "_critic"
             critic_model = CriticNeuralNet.load_model(critic_fp, input_s)
             self.critic.model = critic_model
+
+            self.model.share_memory()
+            self.critic.model.share_memory()
         else:
             print("#" * 10)
             print("path not found model not loaded")
@@ -119,16 +150,26 @@ class MonteCarloTreeSearchAgent:
         torch.set_printoptions(profile="full", linewidth=1000)
         loss_fn = torch.nn.CrossEntropyLoss()
         opt = torch.optim.Adam(self.model.parameters())
-        train_itrs = 50
+
+        passes_over_data = 50
         batch_size = 5
+        train_itrs = math.ceil((len(r_buffer) * passes_over_data) / batch_size)
+        print(train_itrs)
+
+        inp_x, inp_y = [], []
+        for state, v_count_map in r_buffer:
+            if state.current_player_turn == 0:
+                inp_x.append(state.get_as_vec())
+                inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=False))
+            else:
+                inp_x.append(state.get_as_inverted_vec())
+                inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=True))
 
         for _ in range(train_itrs):
-            x_list, y_list = [], []
-            for x, y in generate_batch(r_buffer, batch_size):
-                x_list.append(x)
-                y_list.append(y)
-            x = torch.tensor(x_list, dtype=torch.float)
-            y = torch.tensor(y_list, dtype=torch.float)
+            x, y = generate_batch(inp_x, inp_y, batch_size)
+
+            x = torch.tensor(x, dtype=torch.float)
+            y = torch.tensor(y, dtype=torch.float)
             pred = self.model.forward(x)
             # print("y:    ", y)
             # print("pred: ", pred)
@@ -143,21 +184,6 @@ class MonteCarloTreeSearchAgent:
             opt.step()
 
         self.model.train(False)
-
-    def _get_action_visit_map_as_target_vec(self,
-                                            action_visit_map: {}):
-
-        possible_actions = self.environment.get_action_space_list()
-        visit_sum = sum(action_visit_map.values())
-
-        ret = []
-        for action in possible_actions:
-            value = action_visit_map.get(action)
-            if value is None or visit_sum == 0:
-                ret.append(0)
-            else:
-                ret.append(value / visit_sum)
-        return ret
 
     def print_progress(self,
                        n,
@@ -185,6 +211,7 @@ class MonteCarloTreeSearchAgent:
                     flip_start=False):
         game_done = False
         replay_buffer = []
+        critic_train_set = []
 
         mcts = MontecarloTreeSearch(
             exploration_c=1,
@@ -192,46 +219,25 @@ class MonteCarloTreeSearchAgent:
             agent=self,
             worker_thread_count=10
         )
+        mcts.debug = self.debug
 
         current_state = self.environment.get_initial_state()
         if flip_start:
             current_state.change_turn()
+
+        torch.set_num_threads(10)
         while not game_done:
             if self.debug:
                 print("started new episode")
             mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(num_rollouts=self.num_rollouts, root_state=current_state)
+            all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
+            replay_buffer.append((current_state, mc_visit_counts_map))
 
-            if critic_train_map is not None:
-                critic_train_set = []
-                x, y = [], []
-                for vec, val in critic_train_map.items():
-                    # print(val)
-                    x.append(vec)
-                    y.append(val)
-                    critic_train_set.append((vec.get_as_vec(), val))
-
-                res = self.critic.get_states_value(x)
-                avg_critic_error = np.mean([math.dist((r,), (yv,)) for r, yv in zip(res, y)])
-                print("avg critic error ", avg_critic_error)
-
-                self.critic.train_network(critic_train_set)
-
-            all_action_dist = self._get_action_visit_map_as_target_vec(mc_visit_counts_map)
-            replay_buffer.append((current_state.get_as_vec(), all_action_dist))
-
-            # print(mc_visit_counts_map)
-            # print(all_action_dist)
             # TODO: should probably not always be greedy
             if current_state.current_player_turn() == 0:
                 target_idx = all_action_dist.index(max(all_action_dist))
             else:
                 target_idx = all_action_dist.index(max(all_action_dist))
-                # TODO: ehhhdjshe not good
-                # target_idx = 0
-                # best_v = float("inf")
-                # for n, v in enumerate(all_action_dist):
-                #     if v < best_v and v != 0:
-                #         target_idx = n
 
             action = self.environment.get_action_space_list()[target_idx]
             next_s, r, game_done = self.environment.act(current_state, action)
@@ -240,8 +246,28 @@ class MonteCarloTreeSearchAgent:
             if self.display:
                 self.environment.display_state(next_s)
 
+            if critic_train_map is not None:
+                # x, y = [], []
+                for vec, val in critic_train_map.items():
+                    # print(val)
+                    # x.append(vec)
+                    # y.append(val)
+                    # if vec.current_player_turn() == 0:
+                    critic_train_set.append((vec.get_as_vec(), val))
+                # else:
+                #     critic_train_set.append((vec.get_as_inverted_vec(), val))
+
+        ## critic ##
+        # res = self.critic.get_states_value(x)
+        # avg_critic_error = np.mean([math.dist((r,), (yv,)) for r, yv in zip(res, y)])
+        # print("avg critic error ", avg_critic_error)
+        self.critic.train_network(critic_train_set)
+        ## critic ##
+
         did_win = r == 1
         mcts.close_helper_threads()
+
+        torch.set_num_threads(1)
         return replay_buffer, did_win
 
     def play_against_human(self):
@@ -262,7 +288,7 @@ class MonteCarloTreeSearchAgent:
             # TODO: should probably not always be greedy
             if current_state.current_player_turn() == 0:
                 mc_visit_counts_map, _ = mcts.mc_tree_search(num_rollouts=self.num_rollouts, root_state=current_state)
-                all_action_dist = self._get_action_visit_map_as_target_vec(mc_visit_counts_map)
+                all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
                 target_idx = all_action_dist.index(max(all_action_dist))
                 action = self.environment.get_action_space_list()[target_idx]
                 next_s, r, game_done = self.environment.act(current_state, action)
@@ -308,8 +334,14 @@ class MonteCarloTreeSearchAgent:
             else:
                 win_count.append(0)
             self._train_network(r_buf)
-            if not self.display:
-                self.print_progress(v, n, win_count)
+
+            self.print_progress(v, n, win_count)
+            if self.display:
+                print()
+
+            if v % 10 == 0:
+                self._save_model_to_fp(fp)
+
         print()
         self._save_model_to_fp(fp)
 
@@ -326,12 +358,6 @@ class MonteCarloTreeSearchAgent:
     def pick_action(self,
                     state: GameBaseState,
                     get_prob_not_max=False):
-        """
-        returns the action picked by the agen from the provided state.
-        :param state:
-        :param environment:
-        :return:
-        """
 
         """
         TODO: usikker på den her, mpt player 1/2. 
@@ -344,11 +370,25 @@ class MonteCarloTreeSearchAgent:
             pass
         else:
             x = state.get_as_inverted_vec()
-        prob_dist = self.model.forward(torch.tensor([x], dtype=torch.float))[0].tolist()
+        prob_dist = self.model.forward(torch.tensor([x], dtype=torch.float))[0]
+
+        if torch.any(torch.isnan(prob_dist)):
+            print(x)
+            print(self.model.parameters())
+            prob_dist = self.model.forward(torch.tensor([x], dtype=torch.float))[0]
+            print(prob_dist)
+
+            print(self.model.network(torch.tensor([x], dtype=torch.float)))
+            pass
+
+        prob_dist = prob_dist.tolist()
 
         # print(prob_dist)
 
         # prob_dist = [random.random() if a == 0 else 0 for a in x]
+
+        if sum(prob_dist) == 0:
+            pass
 
         # TODO: implement the some action picker
         # if state.current_player_turn() == 0:
@@ -358,6 +398,8 @@ class MonteCarloTreeSearchAgent:
                 raise Exception("wat")
         else:
             target_val = max(prob_dist)
+
+        # print(prob_dist)
         # else:
         #     target_val = float("inf")
         #     for v in prob_dist:
@@ -371,6 +413,12 @@ class MonteCarloTreeSearchAgent:
             action_inv = self.environment.get_action_space_list()[action_idx]
             action = (action_inv[1], action_inv[0])
 
+        leagal_actions = self.environment.get_valid_actions(state)
+        if action not in leagal_actions:
+            print(prob_dist)
+            print(action)
+            print(state.get_as_vec())
+            print(self.model.network(torch.tensor([x], dtype=torch.float)))
         return action
 
 

@@ -264,6 +264,10 @@ def _get_free_positions(state: HexGameState) -> [(int)]:
     return ret
 
 
+def _gen_inverted_action_space_list(asl):
+    ret = asl.c
+
+
 class HexGameEnvironment(BaseEnvironment):
 
     def __init__(self,
@@ -275,6 +279,8 @@ class HexGameEnvironment(BaseEnvironment):
         self.board_size = board_size
         self._action_space_list = self.get_valid_actions(self.get_initial_state())
 
+        self.inverted_action_space_list = []
+
     def act(self,
             state: HexGameState,
             action: (int, int),
@@ -284,8 +290,11 @@ class HexGameEnvironment(BaseEnvironment):
         x, y = action[0], action[1]
 
         if next_s.hex_board[x][y] != 0:
-            print("move", action)
-            print("from s", next_s)
+            print("#" * 10)
+            print("INVALID MOVE")
+            print("#" * 10)
+            print("move: ", action)
+            print("from s", next_s.get_as_vec())
             self.display_state(next_s)
             raise Exception("invalid move")
 
@@ -341,8 +350,15 @@ class HexGameEnvironment(BaseEnvironment):
     def get_action_space_list(self) -> []:
         return self._action_space_list
 
+    def get_inverted_action_space_list(self,
+                                       state: BaseState) -> [bool]:
+        state_act = self.get_valid_actions(state)
+        all_act = self.get_action_space_list()
+        return [act in state_act for act in all_act]
+
     def get_valid_action_space_list(self,
                                     state: BaseState) -> [bool]:
         state_act = self.get_valid_actions(state)
         all_act = self.get_action_space_list()
         return [act in state_act for act in all_act]
+

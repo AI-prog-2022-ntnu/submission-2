@@ -1,3 +1,4 @@
+import math
 import random
 
 import numpy as np
@@ -53,6 +54,7 @@ class Critic:
         self.input_space = input_space
 
         self.loss_hist = []
+        self.train_buffer = []
 
         self._gen_model()
 
@@ -64,16 +66,17 @@ class Critic:
 
         self.model.train(True)
         torch.set_printoptions(profile="full", linewidth=1000)
-        loss_fn = torch.nn.MSELoss()
+        loss_fn = torch.nn.L1Loss()
         opt = torch.optim.Adam(self.model.parameters())
-        train_itrs = 50
+        passes_over_data = 10
         batch_size = 5
+        train_itrs = math.ceil((len(values) * passes_over_data) / batch_size)
 
         for _ in range(train_itrs):
             x_list, y_list = [], []
             for x, y in generate_batch(values, batch_size):
                 x_list.append(x)
-                y_list.append(y)
+                y_list.append([y])
             x = torch.tensor(x_list, dtype=torch.float)
             y = torch.tensor(y_list, dtype=torch.float)
             pred = self.model.forward(x)
@@ -89,17 +92,35 @@ class Critic:
             loss.backward()
             opt.step()
 
+        full_x, full_y = [], []
+        for x, y in values:
+            full_x.append(x)
+            full_y.append([y])
+
+        full_pred = self.model.forward(torch.tensor(torch.tensor(full_x, dtype=torch.float), dtype=torch.float))
+        tot_set_loss = loss_fn(full_pred,
+                               torch.tensor(full_y, dtype=torch.float)
+                               )
+        print(f"\nCritic_loss: {tot_set_loss}")
+
         self.model.train(False)
 
     def get_state_value(self,
                         state: GameBaseState,
                         debug=False):
+
+        # if state.current_player_turn() == 0:
         state_vec = state.get_as_vec()
+        # else:
+        #     state_vec = state.get_as_inverted_vec()
+
         state_val = self.model.forward(torch.tensor([state_vec], dtype=torch.float))[0].tolist()
         return state_val
 
     def get_states_value(self,
                          state_list):
+
         x = [s.get_as_vec() for s in state_list]
+        # x = [s.get_as_vec() if s.current_player_turn() == 0 else s.get_as_inverted_vec() for s in state_list]
         state_val = self.model.forward(torch.tensor(x, dtype=torch.float))[0].tolist()
         return state_val

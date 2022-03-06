@@ -86,6 +86,11 @@ class BaseEnvironment:
         pass
 
     @abstractmethod
+    def get_inverted_action_space_list(self,
+                                       state: BaseState) -> []:
+        pass
+
+    @abstractmethod
     def get_valid_action_space_list(self,
                                     state: BaseState) -> [bool]:
         """
