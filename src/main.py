@@ -73,17 +73,17 @@ def main():
 
     # agent.train_n_episodes(10)
     # agent.display = True
-    agent.train_n_episodes(300, model_fp)
+    # agent.train_n_episodes(300, model_fp)
 
     # agent.train_n_episodes(10, model_fp)
 
-    plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
-    plot.get_figure().savefig("out.png")
+    # plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
+    # plot.get_figure().savefig("out.png")
 
     # agent.debug = True
     # agent.display = True
     # agent.train_n_episodes(5)
-    # agent.play_against_human()
+    agent.play_against_human()
 
     # init_s = env.get_initial_state()
     # init_s.hex_board = [[1, 1, -1], [1, 1, -1], [-1, -1, 1]]
