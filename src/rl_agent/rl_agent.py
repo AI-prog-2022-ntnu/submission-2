@@ -156,6 +156,21 @@ class MonteCarloTreeSearchAgent:
 
         print(prints, end="\r")
 
+    def get_tree_search_action(self,
+                               current_state,
+                               mcts,
+                               ):
+        # do the montecarlo tree rollout
+        mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(num_rollouts=self.num_rollouts, root_state=current_state)
+
+        # convert the vec to target dist
+        all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
+
+        # pick the action to do
+        target_idx = all_action_dist.index(max(all_action_dist))
+
+        return self.environment.get_action_space_list()[target_idx]
+
     def _take_game_move(self,
                         current_state,
                         mcts,
@@ -320,10 +335,21 @@ class MonteCarloTreeSearchAgent:
 
     def play_against_human(self):
         self.run_episode(
-            player_2=self.play_against_human,
+            player_2=self.human_move,
             train_critic=False,
             flip_start=False,
         )
+
+    def run_topp(self,
+                 n):
+        topp = TOPP(
+            total_itrs=n,
+            game_rollouts=self.num_rollouts,
+            num_games_in_matches=1,
+            num_models_to_save=3,
+            env=self.environment)
+
+        topp.run_tournaments()
 
     def train_n_episodes(self,
                          n,
@@ -467,24 +493,22 @@ class TOPP:
             model.save_actor_critic_to_fp(self._model_save_path(itr))
 
     def run_tournaments(self):
-        competition_pairs = itertools.combinations(self._save_points, 2)
+        competition_pairs = list(itertools.combinations(self._save_points, 2))
         leader_board = {}
-
-        leader_board.setdefault(0)
 
         for pl1, pl2 in competition_pairs:
             for _ in range(self.num_games_in_matches):
                 player1 = MonteCarloTreeSearchAgent(
                     num_rollouts=self.game_rollouts,
                     environment=self.env,
-                    worker_thread_count=10,
+                    worker_thread_count=43,
                     exploration_c=math.sqrt(2)
                 )
 
                 player2 = MonteCarloTreeSearchAgent(
                     num_rollouts=self.game_rollouts,
                     environment=self.env,
-                    worker_thread_count=10,
+                    worker_thread_count=43,
                     exploration_c=math.sqrt(2)
                 )
 
@@ -516,12 +540,23 @@ class TOPP:
                 player_2_mcts.close_helper_threads()
 
                 if p1_win:
-                    leader_board[pl1] += 1
+                    v = leader_board.get(pl1)
+                    if v is not None:
+                        v += 1
+                    else:
+                        v = 1
+                    leader_board[pl1] = v
                 else:
-                    leader_board[pl2] += 1
+
+                    v = leader_board.get(pl2)
+                    if v is not None:
+                        v += 1
+                    else:
+                        v = 1
+                    leader_board[pl2] = v
 
         print("#" * 10)
-        print(f"total {len(competition_pairs)} matches each agent plays {len(self.num_models_to_save)}")
+        print(f"total {len(competition_pairs)} matches each agent plays {self.num_models_to_save}")
         best = list(sorted([(v, k) for k, v in leader_board.items()]))
 
         for val, iter in best:

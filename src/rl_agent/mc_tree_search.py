@@ -27,7 +27,7 @@ from rl_agent.util import EGreedy
 class MonteCarloTreeNode:
     def __init__(self):
         self.visits = 0
-        self.value = 0
+        # self.value = 0
         self.p1_wins = 0
         self.p2_wins = 0
 
@@ -304,7 +304,10 @@ class MontecarloTreeSearch:
             #     s_node.has_been_rolled_out = True
 
             node.visits += 1
-            node.value += prop_val
+            if prop_val == 1:
+                node.p1_wins += 1
+            else:
+                node.p2_wins += 1
 
     def _get_node_by_state(self,
                            state: GameBaseState) -> MonteCarloTreeNode:
@@ -463,7 +466,7 @@ class MontecarloTreeSearch:
         if player_0_turn:
             best_child_value = 0
         else:
-            best_child_value = float("inf")
+            best_child_value = 0  # float("inf")
 
         # while not found:
         ## find candidate ##
@@ -488,13 +491,13 @@ class MontecarloTreeSearch:
             # print(confidence_bound)
             node = self._get_node_by_hash(child.node_hash)
             if player_0_turn:
-                val = (node.value / (node.visits + 1)) + confidence_bound
+                val = (node.p1_wins / (node.visits + 1)) + confidence_bound
                 if val > best_child_value:
                     best_child_value = val
                     best_child = child
             else:
-                val = (node.value / (node.visits + 1)) - confidence_bound
-                if val < best_child_value:
+                val = (node.p2_wins / (node.visits + 1)) + confidence_bound
+                if val > best_child_value:
                     best_child_value = val
                     best_child = child
 
@@ -558,7 +561,7 @@ class MontecarloTreeSearch:
                 # print("node_visits: ", [a.value for a in self.node_map.values()])
 
             if self.debug:
-                print(f"parent visits: {root_node.visits}, value: {root_node.value}")
+                print(f"parent visits: {root_node.visits}, value: {root_node.p1_wins}")
                 for c in root_s_node.children:
                     node = self._get_node_by_hash(c.node_hash)
                     rapid_v = self.tree_policy.calculate_RAPID_value(
@@ -568,7 +571,7 @@ class MontecarloTreeSearch:
                         parent_node=root_node,
                         rapid_maps=self.rapid_map
                     )
-                    print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits an {node.value} value -> value {node.value / (node.visits + 1)} + {self.tree_policy.calculate_upper_confidence_bound_node_value(node, root_node)}")
+                    print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits an {node.p1_wins} value -> value {node.p1_wins / (node.visits + 1)} + {self.tree_policy.calculate_upper_confidence_bound_node_value(node, root_node)}")
 
             while self.active_p_semaphore > 0:
                 change_list = self.from_worker_message_que.get()

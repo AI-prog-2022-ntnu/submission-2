@@ -59,10 +59,11 @@ def main():
     agent = MonteCarloTreeSearchAgent(
         num_rollouts=3000,
         environment=env,
-        worker_thread_count=43,
+        worker_thread_count=10,
         exploration_c=math.sqrt(2)
     )
 
+    agent.run_topp(500)
     # agent.debug = True
 
     # s = env.get_initial_state()
@@ -110,7 +111,7 @@ def main():
 
     # agent.train_n_episodes(10)
     # agent.display = True
-    agent.train_n_episodes(500, model_fp)
+    # agent.train_n_episodes(500, model_fp)
 
     # agent.train_n_episodes(10, model_fp)
 
