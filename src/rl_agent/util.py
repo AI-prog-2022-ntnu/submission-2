@@ -48,10 +48,10 @@ def get_action_visit_map_as_target_vec(environment,
 
     ret = []
     for action in possible_actions:
-        if not invert:
-            value = action_visit_map.get(action)
-        else:
+        if invert:
             value = action_visit_map.get((action[1], action[0]))
+        else:
+            value = action_visit_map.get(action)
 
         if value is None or visit_sum == 0:
             ret.append(0)

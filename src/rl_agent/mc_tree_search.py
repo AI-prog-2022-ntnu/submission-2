@@ -28,13 +28,8 @@ class MonteCarloTreeNode:
     def __init__(self):
         self.visits = 0
         self.value = 0
-
-
-class UpdateDataUnit:
-    def __init__(self):
-        tree_search = []
-        rollout = []
-        final_val = None
+        self.p1_wins = 0
+        self.p2_wins = 0
 
 
 class _SearchNode:
@@ -243,7 +238,9 @@ class MontecarloTreeSearch:
 
         # DO NOT REMOVE
         # mp.set_start_method("spawn")
+        self.e_greedy: EGreedy = None
 
+        self.agent.model.share_memory()
         e_greedy = EGreedy(init_val=0.5, min_val=0.01, rounds_to_min=10)
         for _ in range(worker_thread_count):
             p = mp_context.Process(target=parallel_rollout, args=(self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy))
@@ -394,11 +391,13 @@ class MontecarloTreeSearch:
             update_list.append(parent.node_hash)
             self._apply_node_change_list(change_list=update_list)
         else:
-
-            child: _SearchNode = self.tree_policy.pick_child(parent)
+            if self.e_greedy.should_pick_greedy(increment_round=True):
+                child: _SearchNode = self.pick_child(parent)
+            else:
+                child: _SearchNode = random.choice(parent.children)
             update_list.append(child.node_hash)
 
-            if child.has_been_rolled_out and random.random() < 0.5:
+            if child.has_been_rolled_out:  # and random.random() < 0.5:
                 if not child.has_been_expanded:
                     self._expand_node(child)
 
@@ -418,6 +417,10 @@ class MontecarloTreeSearch:
                      d=0):
         d += 1
 
+        # # if the node is not expanded, expand it
+        # if not parent.has_been_expanded:
+        #     self._expand_node(parent)
+
         # check if any of the children are terminal if so pick them
         terminal_child = self.tree_policy.get_first_terminal_child(parent)
         if terminal_child is not None:
@@ -428,7 +431,10 @@ class MontecarloTreeSearch:
             return
 
         # else use the default tree policy to pick the child and add it to the update list
-        child: _SearchNode = self.pick_child(parent)
+        if self.e_greedy.should_pick_greedy(increment_round=True):
+            child: _SearchNode = self.pick_child(parent)
+        else:
+            child: _SearchNode = random.choice(parent.children)
         update_list.append(child.node_hash)
 
         # if the child has been rolled out we continue down the tree
@@ -508,6 +514,12 @@ class MontecarloTreeSearch:
         root_s_node: _SearchNode = self.search_node_map.get(hash(root_state))
         root_node = self._get_node_by_state(root_state)
 
+        self.e_greedy = EGreedy(
+            init_val=1,
+            min_val=0.1,
+            rounds_to_min=math.floor((num_rollouts * 2) / 3),
+        )
+
         if root_s_node is None:
             root_s_node = _SearchNode(
                 state=root_state,
@@ -569,7 +581,11 @@ class MontecarloTreeSearch:
                 child_s_node: _SearchNode = child
                 node = self._get_node_by_hash(child_s_node.node_hash)
                 ret[child.action_from_parent] = node.visits
-                ret_2_electric_bogaloo[child.state] = (node.value / node.visits)
+                # TODO: CONFIUGURE FROM ELSWHERE
+                if node.visits > 0:
+                    val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
+                    v = (val / node.visits)
+                    ret_2_electric_bogaloo[child.state] = v
 
             return ret, ret_2_electric_bogaloo
 

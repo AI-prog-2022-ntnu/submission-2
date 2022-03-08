@@ -52,6 +52,16 @@ class BaseEnvironment:
         pass
 
     @abstractmethod
+    def winning_player_id(self,
+                          state):
+        """
+        Returns the id of the player who has won the current state.
+        if the state is not won null is returned
+        :param state:
+        :return:
+        """
+
+    @abstractmethod
     def display_state(self,
                       state):
         """

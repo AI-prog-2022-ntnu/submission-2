@@ -1,3 +1,5 @@
+import copy
+import math
 import random
 import time
 from multiprocessing import freeze_support
@@ -7,8 +9,8 @@ import torch.cuda
 import seaborn as sns
 from matplotlib import pyplot as plt
 
-from enviorments.hex.hex_game import HexGameEnvironment
-from rl_agent.rl_agent import MonteCarloTreeSearchAgent, NeuralNetwork
+from enviorments.hex.hex_game import HexGameEnvironment, make_random_hex_board, invert
+from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 
 # import multiprocessing
 import torch
@@ -55,17 +57,52 @@ def main():
     env = HexGameEnvironment(5)
 
     agent = MonteCarloTreeSearchAgent(
-        num_rollouts=2000,
-        environment=env
+        num_rollouts=3000,
+        environment=env,
+        worker_thread_count=43,
+        exploration_c=math.sqrt(2)
     )
+
+    # agent.debug = True
+
+    # s = env.get_initial_state()
+    # board = make_random_hex_board(5)
+    # s.hex_board = board
+    # env.display_state(s)
+    #
+    # inverted_board = copy.deepcopy(board)
+    #
+    # axis_size = len(board)
+    # for x in range(axis_size):
+    #     for y in range(axis_size):
+    #         inverted_board[x][y] = invert(board[y][x])
+    # s2 = copy.deepcopy(s)
+    # s2.hex_board = inverted_board
+    # env.display_state(s2)
+    #
+
+    #
+    # pd = agent.get_prob_dists([s, s2])
+    # s_mod = copy.deepcopy(pd[1])
+    #
+    # for x in range(axis_size):
+    #     for y in range(axis_size):
+    #         s_mod[(x * axis_size) + y] = pd[1][(y * axis_size) + x]
+    #
+    # print("pd 0:     ", pd[0])
+    # print("pd 1:     ", pd[1])
+    # print("pd 1 inv: ", s_mod)
+    #
+    # exit()
 
     # print(torch.cuda.is_available())
 
-    model_fp = "saved_models/model_5x5_vers_1"
-    # agent.load_model_from_fp(model_fp)
+    model_fp = "saved_models/model_5x5_test"
+    # model_fp = None
+    agent.load_model_from_fp(model_fp)
 
-    # agent.display = True
-    # agent.debug = True
+    agent.display = True
+    agent.debug = True
     # agent.run_episode()
     # agent.display = False
     # agent.debug = False
@@ -73,14 +110,20 @@ def main():
 
     # agent.train_n_episodes(10)
     # agent.display = True
-    # agent.train_n_episodes(300, model_fp)
+    agent.train_n_episodes(500, model_fp)
 
     # agent.train_n_episodes(10, model_fp)
 
-    # plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
-    # plot.get_figure().savefig("out.png")
+    if False:
+        plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
+        plot.get_figure().savefig("out_actor.png")
 
-    # agent.debug = True
+        plt.clf()
+
+        plot = sns.lineplot(x=list(range(len(agent.critic.loss_hist))), y=agent.critic.loss_hist)
+        plot.get_figure().savefig("out_critic.png")
+
+    agent.debug = True
     # agent.display = True
     # agent.train_n_episodes(5)
     agent.play_against_human()

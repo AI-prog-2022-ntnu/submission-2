@@ -45,7 +45,6 @@ class HexGameState(GameBaseState):
 
     def current_player_turn(self):
         return self.players_turn
-        pass
 
     def get_as_vec(self) -> [float]:
         ret = []
@@ -73,6 +72,14 @@ class HexGameState(GameBaseState):
 
         return ret
 
+    @staticmethod
+    def invert_state_vec(vec,
+                         axis_size):
+        mod_vec = copy.deepcopy(vec)
+        for x in range(axis_size):
+            for y in range(axis_size):
+                mod_vec[(x * axis_size) + y] = vec[(x * axis_size) + y]
+
     def __hash__(self):
         return hash(str(self.get_as_vec()))
 
@@ -84,8 +91,15 @@ class HexGameState(GameBaseState):
 def _make_hex_board(size: int):
     ret = []
     for _ in range(size):
-        # ret.append([random.randint(-1, 1) for _ in range(size)])
         ret.append([0 for _ in range(size)])
+
+    return ret
+
+
+def make_random_hex_board(size: int):
+    ret = []
+    for _ in range(size):
+        ret.append([random.randint(-1, 1) for _ in range(size)])
 
     return ret
 
@@ -312,12 +326,27 @@ class HexGameEnvironment(BaseEnvironment):
         elif player_1_won:
             reward = -1
         elif is_board_full:
+            # this is not possible
+            raise Exception("shold not be reahable")
             reward = 0
         else:
             reward = 0
 
         done = is_board_full or player_0_won or player_1_won
         return next_s, reward, done
+
+    def winning_player_id(self,
+                          state):
+
+        player_0_won = _is_game_won(state, team_0=True)
+        player_1_won = _is_game_won(state, team_0=False)
+
+        if player_0_won:
+            return 0
+        elif player_1_won:
+            return 1
+        else:
+            return None
 
     def get_valid_actions(self,
                           state):
@@ -361,4 +390,3 @@ class HexGameEnvironment(BaseEnvironment):
         state_act = self.get_valid_actions(state)
         all_act = self.get_action_space_list()
         return [act in state_act for act in all_act]
-
