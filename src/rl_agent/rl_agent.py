@@ -8,7 +8,7 @@ from torch import nn
 from abc import abstractmethod
 from os import path
 from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 # TODO: generalize
 # TODO: have not checked that this actually works at all
@@ -356,7 +356,7 @@ class MonteCarloTreeSearchAgent:
         return [random.random() if a != 0 else 0 for a in state_list[0]]
 
     def pick_action(self,
-                    state: GameBaseState,
+                    state: BoardGameBaseState,
                     get_prob_not_max=False):
 
         """

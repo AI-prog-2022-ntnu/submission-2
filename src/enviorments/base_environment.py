@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 
-from enviorments.base_state import BaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 """
 The basis for an environment for the rl agent to act in
@@ -97,4 +97,27 @@ class BaseEnvironment:
         Returns a list of bool values indicating witch of the get_action_space_list() actions are available
         :return:
         """
+        pass
+
+
+
+class BoardGameEnvironment(BaseEnvironment):
+
+    @abstractmethod
+    def game_has_reversible_moves(self) -> bool:
+        pass
+
+    @abstractmethod
+    def reverse_move(self, state: BoardGameBaseState, action) -> BoardGameBaseState:
+        """
+
+        if the game has reversible moves return the state with the move reversed
+        Args:
+            state:
+            action:
+
+        Returns:
+
+        """
+
         pass

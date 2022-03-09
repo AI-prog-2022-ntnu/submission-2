@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 
 class CriticNeuralNet(nn.Module):
@@ -106,7 +106,7 @@ class Critic:
         self.model.train(False)
 
     def get_state_value(self,
-                        state: GameBaseState,
+                        state: BoardGameBaseState,
                         debug=False):
 
         # if state.current_player_turn() == 0:

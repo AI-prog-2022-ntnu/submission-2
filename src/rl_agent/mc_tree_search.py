@@ -7,7 +7,7 @@ import copy
 import numpy as np
 
 from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 from concurrent.futures import ProcessPoolExecutor
 
@@ -39,7 +39,7 @@ class UpdateDataUnit:
 
 class _SearchNode:
     def __init__(self,
-                 state: GameBaseState,
+                 state: BoardGameBaseState,
                  node_hash,
                  reward=0,
                  has_terminal_child=False,
@@ -60,32 +60,10 @@ class _SearchNode:
         self.state = state
 
 
-class RapidMaps:
-
-    def __init__(self,
-                 zeroed_board):
-
-        self.rapid_win_map = copy.deepcopy(zeroed_board)
-        self.rapid_lose_map = copy.deepcopy(zeroed_board)
-
-        self.rapid_move_count_map = copy.deepcopy(zeroed_board)
-
-    def update_maps(self,
-                    map,
-                    value):
-        if value == 1:
-            target_value = self.rapid_win_map
-        elif value == -1:
-            target_value = self.rapid_lose_map
-
-        for n, row in enumerate(map):
-            for i, col_v in enumerate(row):
-                self.rapid_move_count_map[n][i] += 1
-                target_value[n][i] += 1
 
 
 def _parallel_mc_rollout(
-        state: GameBaseState,
+        state: BoardGameBaseState,
         agent,
         environment: BaseEnvironment,
         update_list: [],
@@ -104,10 +82,6 @@ def _parallel_mc_rollout(
 
     if done:
         update_list.insert(0, reward)
-
-        # TODO: god please save me this is horrible
-        update_list.insert(0, state)
-
     else:
         _parallel_mc_rollout(next_state, agent, environment, update_list, e_greedy)
 
@@ -148,45 +122,10 @@ class TreePolicy:
     def calculate_upper_confidence_bound_node_value(self,
                                                     node,
                                                     parent_node):
-        # if search_node.node.visits == 0:
-        #     # how best solve problems -> pretend they are not there
-        #     return 0
-
-        # node_v = node.value / (node.visits + 1)
         ucbt = self.exploration_c * np.sqrt(np.divide(np.log1p(parent_node.visits), (node.visits + 1)))
-        # goodness = self.node_goodness(s_node)
-        # td = goodness if goodness is not None else np.log1p(parent_node.visits)
-        # ucbt = self.exploration_c * np.sqrt(np.divide(td, (node.visits + 1)))
-
-        # if ucbt < 0:
-        #     print("aaaa")
-        """
-        the powerpoint adds 1 to parent_node.visits abowe i assume this is to avoid div/0 errors 
-        """
         return ucbt
 
-    def _rapid_b(self,
-                 num,
-                 num_won_with_n):
-        return (num_won_with_n) / (1 + num + num_won_with_n + (4 * self.exploration_b * num * num_won_with_n))
 
-    def calculate_RAPID_value(self,
-                              search_node_parent: _SearchNode,
-                              search_node: _SearchNode,
-                              node: MonteCarloTreeNode,
-                              parent_node: MonteCarloTreeNode,
-                              rapid_maps: RapidMaps):
-        action = search_node.action_from_parent
-        if search_node_parent.state.current_player_turn() == 0:
-            num_won_with_move = rapid_maps.rapid_win_map[action[0]][action[1]]
-        else:
-            num_won_with_move = rapid_maps.rapid_lose_map[action[0]][action[1]]
-        num_with_move = rapid_maps.rapid_move_count_map[action[0]][action[1]]
-        l1 = (1 - self._rapid_b(node.visits, num_with_move)) * (num_won_with_move / (node.visits + 1))
-        l2 = (self._rapid_b(node.visits, num_with_move)) * (num_won_with_move / (node.visits + 1))
-        l3 = self.exploration_c * np.sqrt(np.divide(np.log1p(parent_node.visits), (node.visits + 1)))
-
-        return l1 + l2 + l3
 
     def get_first_terminal_child(self,
                                  search_node):
@@ -253,11 +192,6 @@ class MontecarloTreeSearch:
 
         self.node_map = {}
 
-        # TODO: FIX HARDCODE
-        zeroed_board = environment.get_initial_state().hex_board
-        self.rapid_map = RapidMaps(zeroed_board)
-
-        pass
 
     ################################
     #          Utilitys            #
@@ -294,11 +228,6 @@ class MontecarloTreeSearch:
     def _apply_node_change_list(self,
                                 change_list):
         prop_val = change_list[0]
-        last_state = change_list.pop()
-
-        # TODO: hardcode
-        # print(change_list)
-        self.rapid_map.update_maps(last_state.hex_board, prop_val)
 
         for node_hash in change_list[1:]:
             node = self._get_node_by_hash(node_hash)
@@ -310,7 +239,7 @@ class MontecarloTreeSearch:
             node.value += prop_val
 
     def _get_node_by_state(self,
-                           state: GameBaseState) -> MonteCarloTreeNode:
+                           state: BoardGameBaseState) -> MonteCarloTreeNode:
         node = self.node_map.get(hash(state))
         if node is None:
             node = MonteCarloTreeNode()
@@ -504,7 +433,7 @@ class MontecarloTreeSearch:
 
     def mc_tree_search(self,
                        num_rollouts,
-                       root_state: GameBaseState):
+                       root_state: BoardGameBaseState):
         root_s_node: _SearchNode = self.search_node_map.get(hash(root_state))
         root_node = self._get_node_by_state(root_state)
 

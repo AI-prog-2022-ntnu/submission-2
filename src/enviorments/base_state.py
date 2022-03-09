@@ -21,7 +21,7 @@ class BaseState:
         pass
 
 
-class GameBaseState(BaseState):
+class BoardGameBaseState(BaseState):
 
     @abstractmethod
     def get_as_inverted_vec(self) -> [float]:

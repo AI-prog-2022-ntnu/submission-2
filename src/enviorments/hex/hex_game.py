@@ -1,9 +1,10 @@
 import random
 
 from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 import copy
+import marshal
 
 
 class colors:
@@ -22,7 +23,7 @@ def invert(x):
         return 0
 
 
-class HexGameState(GameBaseState):
+class HexBoardGameState(BoardGameBaseState):
     '''
     boards are represented as vectors turned 34 degrees i.e.
         a
@@ -38,6 +39,7 @@ class HexGameState(GameBaseState):
     def __init__(self,
                  board):
         self.hex_board = board
+        self.board_hash = hash(marshal.dump(board))
         self.players_turn = 0
 
     def change_turn(self):
@@ -62,19 +64,13 @@ class HexGameState(GameBaseState):
             for y in range(axis_size):
                 inverted_board[x][y] = invert(self.hex_board[y][x])
 
-        # print(inverted_board)
-
-        # for row in self.hex_board:
-        #     nr = [invert(x) for x in reversed(row)]
-        #     inverted_board.append(nr)
-
         for r in inverted_board:
             ret.extend(r)
 
         return ret
 
     def __hash__(self):
-        return hash(str(self.get_as_vec()))
+        return self.board_hash
 
     def __eq__(self,
                other):
@@ -222,7 +218,7 @@ def _win_traverse(board: [[int]],
     return suc
 
 
-def _is_game_won(state: HexGameState,
+def _is_game_won(state: HexBoardGameState,
                  team_0: bool):
     checked = []
     board = state.hex_board
@@ -254,7 +250,7 @@ def _is_game_won(state: HexGameState,
     return win
 
 
-def _get_free_positions(state: HexGameState) -> [(int)]:
+def _get_free_positions(state: HexBoardGameState) -> [(int)]:
     ret = []
     for n, row in enumerate(state.hex_board):
         for i, tile in enumerate(row):
@@ -282,7 +278,7 @@ class HexGameEnvironment(BaseEnvironment):
         self.inverted_action_space_list = []
 
     def act(self,
-            state: HexGameState,
+            state: HexBoardGameState,
             action: (int, int),
             inplace=False) -> (BaseState, int, bool):
         next_s = copy.deepcopy(state) if not inplace else state
@@ -323,15 +319,15 @@ class HexGameEnvironment(BaseEnvironment):
                           state):
         return _get_free_positions(state)
 
-    def get_initial_state(self) -> HexGameState:
-        return HexGameState(_make_hex_board(self.board_size))
+    def get_initial_state(self) -> HexBoardGameState:
+        return HexBoardGameState(_make_hex_board(self.board_size))
 
     def is_state_won(self,
                      state) -> bool:
         return _is_game_won(state, True)
 
     def display_state(self,
-                      state: HexGameState):
+                      state: HexBoardGameState):
         _terminal_display_hex_board(state.hex_board)
 
         red_w = _is_game_won(state, False)
