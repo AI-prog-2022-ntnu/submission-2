@@ -1,7 +1,7 @@
 import math
 
 from ActorClient import ActorClient
-from enviorments.hex.hex_game import HexGameEnvironment, HexGameState
+from enviorments.hex.hex_game import HexGameEnvironment, HexBoardGameState
 from rl_agent.mc_tree_search import MontecarloTreeSearch
 from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 
@@ -42,7 +42,7 @@ class OHTClient(ActorClient):
         player = state.pop(0) - 1
         s_vec = map_board(state)
 
-        actual_state = HexGameState(
+        actual_state = HexBoardGameState(
             board=s_vec
         )
         actual_state.players_turn = player

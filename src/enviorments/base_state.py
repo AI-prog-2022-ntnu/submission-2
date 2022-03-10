@@ -21,7 +21,7 @@ class BaseState:
         pass
 
 
-class GameBaseState(BaseState):
+class BoardGameBaseState(BaseState):
 
     @abstractmethod
     def get_as_inverted_vec(self) -> [float]:
@@ -33,4 +33,8 @@ class GameBaseState(BaseState):
 
     @abstractmethod
     def current_player_turn(self):
+        pass
+
+    @abstractmethod
+    def change_turn(self):
         pass

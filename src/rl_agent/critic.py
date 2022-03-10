@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 
 class CriticNeuralNet(nn.Module):
@@ -14,6 +14,7 @@ class CriticNeuralNet(nn.Module):
                  b_size):
         super(CriticNeuralNet, self).__init__()
 
+        self.inp_s = inp_s
         self.device_used = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.network = nn.Sequential(
         #     nn.Linear(inp_s, 200),
@@ -22,50 +23,66 @@ class CriticNeuralNet(nn.Module):
         #     nn.ELU(),
         #     nn.Linear(200, 1),
         #     nn.Tanh(),
-        # )
+        # )o
+
+        self.network = nn.Sequential(
+            nn.Linear(inp_s * 2, 100),
+            nn.Tanh(),
+            nn.Linear(100, 1),
+
+            # nn.ReLU()  # <- DONT CHANGE
+            # nn.Tanh()
+            # nn.Softmax()
+        )
 
         self.loss_fn = torch.nn.L1Loss().to(device=self.device_used)
 
-        self.network = nn.Sequential(
-            nn.Conv2d(
-                in_channels=2,
-                out_channels=10,
-                kernel_size=(5, 5),
-                padding=2,
-                # stride=2
-            ),
-            # nn.Hardtanh(),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=10,
-                out_channels=30,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear((b_size * b_size) * 30, 100),
-            nn.ReLU(),
-            nn.Linear(100, 1),
-            # nn.ReLU()  # <- DONT CHANGE
-            # nn.Tanh(),
-            # nn.Softmax()
-        ).to(device=self.device_used)
+        # self.network = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=2,
+        #         out_channels=10,
+        #         kernel_size=(5, 5),
+        #         padding=2,
+        #         # stride=2
+        #     ),
+        #     # nn.Hardtanh(),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=10,
+        #         out_channels=30,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear((b_size * b_size) * 30, 100),
+        #     nn.ReLU(),
+        #     nn.Linear(100, 1),
+        #     # nn.ReLU()  # <- DONT CHANGE
+        #     # nn.Tanh(),
+        #     # nn.Softmax()
+        # ).to(device=self.device_used)
 
         self.opt = torch.optim.Adam(self.parameters())
         self.b_size = b_size
 
     def forward(self,
-                inp_x):
-        x = inp_x.to(device=self.device_used)
+                inp_x,
+                use_cuda=False):
+
+        if use_cuda:
+            x = inp_x.to(device=self.device_used)
+        else:
+            x = inp_x
 
         p1_inp = torch.where(x == 1, 1.0, 0.0)
         p2_inp = torch.where(x == -1, 1.0, 0.0)
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
 
-        x = p_stack.view((-1, 2, self.b_size, self.b_size))
+        # x = p_stack.view((-1, 2, self.b_size, self.b_size))
+        x = p_stack.view((-1, self.inp_s * 2))
 
         # x = x.view((-1, 1, self.b_size, self.b_size))
         return self.network(x)
@@ -163,6 +180,7 @@ class Critic:
         self.train_buffer = []
 
         self._gen_model()
+        self.latest_set_loss_list = []
 
     def _gen_model(self):
         self.model = CriticNeuralNet(self.input_space, b_size=self.b_size)
@@ -179,7 +197,7 @@ class Critic:
         loss_fn = torch.nn.L1Loss()  # .cuda(device_used)
         # opt = torch.optim.Adam(model.parameters())
         passes_over_data = 50
-        batch_size = 20
+        batch_size = 10
         train_itrs = math.ceil((len(values) * passes_over_data) / batch_size)
 
         x_list, y_list = [], []
@@ -221,10 +239,11 @@ class Critic:
         full_pred = self.model.forward(torch.tensor(full_x, dtype=torch.float))
         full_y_tensor = torch.tensor(full_y, dtype=torch.float)
         tot_set_loss = loss_fn(full_pred.to(device="cpu"), full_y_tensor)
+        self.latest_set_loss_list.append(tot_set_loss)
         print(f"\nCritic_loss: {tot_set_loss}")
 
     def get_state_value(self,
-                        state: GameBaseState,
+                        state: BoardGameBaseState,
                         debug=False):
 
         # if state.current_player_turn() == 0:

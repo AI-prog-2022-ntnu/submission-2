@@ -13,6 +13,7 @@ class ActorNeuralNetwork(nn.Module):
                  b_size):
         super(ActorNeuralNetwork, self).__init__()
 
+        self.inp_s = inp_s
         self.train_device = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # self.network = nn.Sequential(
@@ -27,31 +28,41 @@ class ActorNeuralNetwork(nn.Module):
         # )
 
         self.network = nn.Sequential(
-            nn.Conv2d(
-                in_channels=2,
-                out_channels=30,
-                kernel_size=(5, 5),
-                padding=2,
-                # stride=2
-            ),
-            # nn.Hardtanh(),
+            nn.Linear(inp_s * 2, 100),
             nn.ReLU(),
-            nn.Conv2d(
-                in_channels=30,
-                out_channels=30,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
+            nn.Linear(100, out_s),
             nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear((b_size * b_size) * 30, out_s),
-            nn.ReLU()  # <- DONT CHANGE
-            # nn.Tanh(),
+            # nn.ReLU()  # <- DONT CHANGE
+            # nn.Tanh()
             # nn.Softmax()
         )
+
+        # self.network = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=2,
+        #         out_channels=30,
+        #         kernel_size=(5, 5),
+        #         padding=2,
+        #         # stride=2
+        #     ),
+        #     # nn.Hardtanh(),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=30,
+        #         out_channels=30,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear((b_size * b_size) * 30, out_s),
+        #     nn.ReLU()  # <- DONT CHANGE
+        #     # nn.Tanh(),
+        #     # nn.Softmax()
+        # )
         self.loss_fn = torch.nn.CrossEntropyLoss()
-        self.opt = torch.optim.Adam(self.parameters())
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.0002)
         self.b_size = b_size
 
     def forward(self,
@@ -68,7 +79,9 @@ class ActorNeuralNetwork(nn.Module):
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
 
-        x = p_stack.view((-1, 2, self.b_size, self.b_size))
+        # x = p_stack.view((-1, 2, self.b_size, self.b_size))
+        x = p_stack.view((-1, self.inp_s * 2))
+        # print(x)
         # print(x.dtype)
         # x.type(torch.LongTensor)
         # x = x.long()

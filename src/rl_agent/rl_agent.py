@@ -4,13 +4,14 @@ import random
 import os
 
 import numpy as np
+import pandas
 import torch
 from torch import nn
 
 from abc import abstractmethod
 from os import path
-from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 # TODO: generalize
 # TODO: have not checked that this actually works at all
@@ -27,8 +28,12 @@ class MonteCarloTreeSearchAgent:
                  num_rollouts: int,
                  worker_thread_count,
                  exploration_c,
+                 topp_saves,
+                 ms_tree_search_time
                  ):
         # TODO: implement layer config
+        self.ms_tree_search_time = ms_tree_search_time
+        self.topp_saves = topp_saves
         self.exploration_c = exploration_c
         self.worker_thread_count = worker_thread_count
         self.num_rollouts = num_rollouts
@@ -90,8 +95,8 @@ class MonteCarloTreeSearchAgent:
         # loss_fn = torch.nn.CrossEntropyLoss()
         # opt = torch.optim.Adam(model.parameters())
 
-        passes_over_data = 200
-        batch_size = 5
+        passes_over_data = 400
+        batch_size = 10
         train_itrs = math.ceil((len(r_buffer) * passes_over_data) / batch_size)
         # print(train_itrs)
 
@@ -341,26 +346,28 @@ class MonteCarloTreeSearchAgent:
         )
 
     def run_topp(self,
-                 n):
+                 n,
+                 num_games):
         topp = TOPP(
             total_itrs=n,
             game_rollouts=self.num_rollouts,
-            num_games_in_matches=1,
-            num_models_to_save=3,
-            env=self.environment)
+            num_games_in_matches=num_games,
+            num_models_to_save=self.topp_saves,
+            environment=self.environment)
 
         topp.run_tournaments()
 
     def train_n_episodes(self,
                          n,
-                         fp=None):
+                         fp=None,
+                         games_in_topp_matches=500):
 
         topp = TOPP(
             total_itrs=n,
             game_rollouts=self.num_rollouts,
-            num_games_in_matches=1,
-            num_models_to_save=3,
-            env=self.environment
+            num_games_in_matches=games_in_topp_matches,
+            num_models_to_save=self.topp_saves,
+            environment=self.environment
         )
 
         win_count = [0 for _ in range(50)]
@@ -383,8 +390,12 @@ class MonteCarloTreeSearchAgent:
             if v % 10 == 0:
                 self.save_actor_critic_to_fp(fp)
 
-            topp.register_policy(self, v)
+            topp.register_policy(self, v, run_tornament=True)
 
+        actor_loss = pandas.DataFrame(self.loss_hist)
+        actor_loss.to_csv(fp + "_actor_loss.csv")
+        critic_loss = pandas.DataFrame(self.critic.loss_hist)
+        critic_loss.to_csv(fp + "_critic_loss.csv")
         print()
         self.save_actor_critic_to_fp(fp)
 
@@ -400,7 +411,7 @@ class MonteCarloTreeSearchAgent:
         return prob_dist  # [random.random() if a != 0 else 0 for a in state_list[0]]
 
     def pick_action(self,
-                    state: GameBaseState,
+                    state: BoardGameBaseState,
                     get_prob_not_max=False):
 
         """
@@ -466,9 +477,9 @@ class TOPP:
                  num_models_to_save,
                  num_games_in_matches,
                  game_rollouts,
-                 env):
+                 environment: BoardGameEnvironment):
         self.game_rollouts = game_rollouts
-        self.env = env
+        self.environment = environment
         self.num_games_in_matches = num_games_in_matches
         self.num_models_to_save = num_models_to_save
         self.total_itrs = total_itrs
@@ -488,76 +499,100 @@ class TOPP:
 
     def register_policy(self,
                         model: MonteCarloTreeSearchAgent,
-                        itr):
+                        itr,
+                        run_tornament=False):
         if itr in self._save_points:
             model.save_actor_critic_to_fp(self._model_save_path(itr))
 
+            if run_tornament:
+                self.run_tournaments()
+
+    def _tornament_model_pick_action(self,
+                                     state,
+                                     model):
+        if state.current_player_turn() == 0:
+            x = state.get_as_vec()
+        else:
+            x = state.get_as_inverted_vec()
+
+        prob_dist = model.forward(torch.tensor([x], dtype=torch.float))[0]
+        prob_dist = prob_dist.tolist()
+
+        if sum(prob_dist) == 0:
+            action = random.choice(self.environment.get_valid_actions(state))
+        else:
+            target_val = max(prob_dist)
+            action_idx = prob_dist.index(target_val)
+
+            if state.current_player_turn() == 0:
+                action = self.environment.get_action_space_list()[action_idx]
+            else:
+                action_inv = self.environment.get_action_space_list()[action_idx]
+                action = (action_inv[1], action_inv[0])
+
+        return action
+
     def run_tournaments(self):
-        competition_pairs = list(itertools.combinations(self._save_points, 2))
-        leader_board = {}
+        used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
+        competition_pairs = list(itertools.combinations(used_save_p, 2))
+
+        leader_board = {k: (0, 0) for k in used_save_p}
+
+        input_s = self.environment.get_observation_space_size()
+        output_s = self.environment.get_action_space_size()
+        xs = math.floor(math.sqrt(input_s))
 
         for pl1, pl2 in competition_pairs:
-            for _ in range(self.num_games_in_matches):
-                player1 = MonteCarloTreeSearchAgent(
-                    num_rollouts=self.game_rollouts,
-                    environment=self.env,
-                    worker_thread_count=43,
-                    exploration_c=math.sqrt(2)
-                )
+            p1_score = 0
+            p2_score = 0
+            model_1 = ActorNeuralNetwork.load_model(self._model_save_path(pl1), input_s, output_s, xs)
+            model_2 = ActorNeuralNetwork.load_model(self._model_save_path(pl2), input_s, output_s, xs)
+            # print(f"iter {pl1} vs {pl2}")
 
-                player2 = MonteCarloTreeSearchAgent(
-                    num_rollouts=self.game_rollouts,
-                    environment=self.env,
-                    worker_thread_count=43,
-                    exploration_c=math.sqrt(2)
-                )
+            for n in range(self.num_games_in_matches):
+                game_done = False
+                game_state: BoardGameBaseState = self.environment.get_initial_state()
 
-                player1.load_model_from_fp(self._model_save_path(pl1))
-                player2.load_model_from_fp(self._model_save_path(pl2))
+                # 50% chance for model 2 to start
+                if random.random() > 0.5:
+                    game_state.change_turn()
 
-                pl1_start = random.random() > 0.5
-
-                # manually make the player 2 mcts
-
-                player_2_mcts = MontecarloTreeSearch(
-                    exploration_c=player2.exploration_c,
-                    environment=player2.environment,
-                    agent=player2,
-                    worker_thread_count=player2.worker_thread_count
-                )
-
-                p1_win = player1.run_episode(
-                    player_2=lambda state: player2._take_game_move(
-                        current_state=state,
-                        mcts=player_2_mcts,
-                        replay_buffer=[],
-                        critic_train_set=[]
-                    ),
-                    flip_start=pl1_start,
-                    train_critic=False
-                )
-
-                player_2_mcts.close_helper_threads()
-
-                if p1_win:
-                    v = leader_board.get(pl1)
-                    if v is not None:
-                        v += 1
+                while not game_done:
+                    if game_state.current_player_turn() == 0:
+                        action = self._tornament_model_pick_action(game_state, model_1)
                     else:
-                        v = 1
-                    leader_board[pl1] = v
+                        action = self._tornament_model_pick_action(game_state, model_2)
+                    game_state, r, game_done = self.environment.act(game_state, action, inplace=True)
+
+                if r == 1:
+                    p1_score += 1
+                    winner = pl1
+                    loser = pl2
+                elif r == -1:
+                    p2_score += 1
+                    winner = pl2
+                    loser = pl1
                 else:
+                    raise Exception("state error")
 
-                    v = leader_board.get(pl2)
-                    if v is not None:
-                        v += 1
-                    else:
-                        v = 1
-                    leader_board[pl2] = v
+                leader_board[winner] = (leader_board[winner][0] + 1, leader_board[winner][1])
+                leader_board[loser] = (leader_board[loser][0], leader_board[loser][1] + 1)
+
+                frac_p1 = (p1_score + 1) / (p2_score + p1_score + 2)
+                p1_bar = math.floor(frac_p1 * 100) * "|"
+                p2_bar = math.floor((1 - frac_p1) * 100) * "|"
+                print("iter: \u001b[32m{:<5}\u001b[0m -{:->4}-> \u001b[32m{}\u001b[31m{}\u001b[0m <-{:-<4}-iter: \u001b[31m{:>5}\u001b[0m".format(pl1,
+                                                                                                                                                  p1_score,
+                                                                                                                                                  p1_bar,
+                                                                                                                                                  p2_bar,
+                                                                                                                                                  p2_score,
+                                                                                                                                                  pl2) + " " * 100, end="\r")
+            print()
 
         print("#" * 10)
         print(f"total {len(competition_pairs)} matches each agent plays {self.num_models_to_save}")
-        best = list(sorted([(v, k) for k, v in leader_board.items()]))
+        best = list(sorted([(v[0], k) for k, v in leader_board.items()]))
 
-        for val, iter in best:
-            print(f"iter {iter} won {val} matches")
+        for value, key in best:
+            wins, losses = leader_board[key]
+            print(f"iteration {key} won: {wins} loss: {losses} matches")

@@ -3,11 +3,13 @@ import math
 import queue
 import random
 import copy
+import time
 
 import numpy as np
+import torch
 
-from enviorments.base_environment import BaseEnvironment
-from enviorments.base_state import BaseState, GameBaseState
+from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
+from enviorments.base_state import BaseState, BoardGameBaseState
 
 from concurrent.futures import ProcessPoolExecutor
 
@@ -15,26 +17,29 @@ from multiprocessing import Queue
 from torch import multiprocessing as mp
 
 # executor = ProcessPoolExecutor()
-
-
-# class MonteCarloTreeNode:
-#     def __init__(self):
-#         self.visits = 0
-#         self.value = 0
+from rl_agent.critic import Critic
 from rl_agent.util import EGreedy
 
 
-class MonteCarloTreeNode:
+class NodeValueCounter:
     def __init__(self):
         self.visits = 0
-        # self.value = 0
+        self.value = 0
         self.p1_wins = 0
         self.p2_wins = 0
 
 
+class StateValuePropegator:
+    def __init__(self):
+        self.tree_search_node_state_hashes = []
+        self.tree_search_nodes_has_visits_pre_propegated = False
+        self.rollout_nodes_state_hashes = []
+        self.value = []
+
+
 class _SearchNode:
     def __init__(self,
-                 state: GameBaseState,
+                 state: BoardGameBaseState,
                  node_hash,
                  reward=0,
                  has_terminal_child=False,
@@ -55,38 +60,76 @@ class _SearchNode:
         self.state = state
 
 
-class RapidMaps:
+def probe_n(
+        state: BoardGameBaseState,
+        environment: BaseEnvironment,
+        n
+):
+    possible_moves = environment.get_valid_actions(state)
+    hit, val = 0, 0
+    n -= 1
 
-    def __init__(self,
-                 zeroed_board):
+    for action in possible_moves:
+        # print(action)
+        n_state, reward, done = environment.act(state, action, inplace=True)
+        if done:
+            val += reward
+            hit += 1
+        else:
+            if n > 0:
+                probe_h, probe_v = probe_n(n_state, environment, n)
+                hit += probe_h
+                val += probe_v
 
-        self.rapid_win_map = copy.deepcopy(zeroed_board)
-        self.rapid_lose_map = copy.deepcopy(zeroed_board)
+        environment.reverse_move(n_state, action)
 
-        self.rapid_move_count_map = copy.deepcopy(zeroed_board)
+    return hit, val
 
-    def update_maps(self,
-                    map,
-                    value):
-        if value == 1:
-            target_value = self.rapid_win_map
-        elif value == -1:
-            target_value = self.rapid_lose_map
 
-        for n, row in enumerate(map):
-            for i, col_v in enumerate(row):
-                self.rapid_move_count_map[n][i] += 1
-                target_value[n][i] += 1
+def min_max_search(
+        state: BoardGameBaseState,
+        environment: BaseEnvironment,
+        current_max: bool,
+        d=0
+):
+    if d < 4:
+        print("chk ", d)
+    nd = d + 1
+    possible_moves = environment.get_valid_actions(state)
+    for action in possible_moves:
+        # print(action)
+        n_state, reward, done = environment.act(state, action, inplace=True)
+        if done:
+            environment.reverse_move(n_state, action)
+            return reward
+        else:
+            current_max ^= True
+            r = min_max_search(n_state, environment, current_max, nd)
+
+        if current_max and r == 1:
+            environment.reverse_move(n_state, action)
+            return r
+        elif not current_max and r == -1:
+            environment.reverse_move(n_state, action)
+            return r
+
+        environment.reverse_move(n_state, action)
+
+    return r
 
 
 def _parallel_mc_rollout(
-        state: GameBaseState,
+        state: BoardGameBaseState,
         agent,
-        environment: BaseEnvironment,
-        update_list: [],
+        environment: BoardGameEnvironment,
+        value_prop: StateValuePropegator,
         e_greedy: EGreedy,
 ):
-    if e_greedy.should_pick_greedy(increment_round=True):
+    state_hash = hash(state)
+    winning_move = environment.get_state_winning_move(state)
+    if winning_move is not None:
+        action = winning_move
+    elif e_greedy.should_pick_greedy(increment_round=True):
         action = agent.pick_action(state=state)
     else:
         action = random.choice(environment.get_valid_actions(state))
@@ -98,15 +141,11 @@ def _parallel_mc_rollout(
         raise Exception("\n\nWAAAAAAAA\n\n")
 
     if done:
-        update_list.insert(0, reward)
-
-        # TODO: god please save me this is horrible
-        update_list.insert(0, state)
-
+        value_prop.value = reward
     else:
-        _parallel_mc_rollout(next_state, agent, environment, update_list, e_greedy)
+        _parallel_mc_rollout(next_state, agent, environment, value_prop, e_greedy)
 
-    update_list.append(hash(state))
+    value_prop.rollout_nodes_state_hashes.append(state_hash)
 
 
 def parallel_rollout(agent,
@@ -119,17 +158,26 @@ def parallel_rollout(agent,
         msg = in_que.get()
 
         if msg is not None:
+            root_state, value_prop, use_critic_prob = msg
 
-            root_state, update_list = msg
-            # update_list = []
-            _parallel_mc_rollout(root_state, agent, env, update_list, e_greedy)
+            if random.random() < use_critic_prob:
+                value = agent.critic.get_state_value(root_state)[0]
+                value_prop.value = value
+            else:
+                _parallel_mc_rollout(root_state, agent, env, value_prop, e_greedy)
 
-            v = update_list.pop(0)
-            update_list.append(v)
-            out_que.put(update_list)
+            out_que.put(value_prop)
             e_greedy.reset()
         else:
             run = False
+
+
+def calculate_upper_confidence_bound_node_value(exploration_c,
+                                                node_visits,
+                                                parent_visits):
+    ucbt = exploration_c * np.sqrt(np.divide(np.log1p(parent_visits), (node_visits + 1)))
+
+    return ucbt
 
 
 # this is super tight copled but practical
@@ -139,49 +187,6 @@ class TreePolicy:
 
         self.exploration_c = exploration_c
         self.exploration_b = exploration_c
-
-    def calculate_upper_confidence_bound_node_value(self,
-                                                    node,
-                                                    parent_node):
-        # if search_node.node.visits == 0:
-        #     # how best solve problems -> pretend they are not there
-        #     return 0
-
-        # node_v = node.value / (node.visits + 1)
-        ucbt = self.exploration_c * np.sqrt(np.divide(np.log1p(parent_node.visits), (node.visits + 1)))
-        # goodness = self.node_goodness(s_node)
-        # td = goodness if goodness is not None else np.log1p(parent_node.visits)
-        # ucbt = self.exploration_c * np.sqrt(np.divide(td, (node.visits + 1)))
-
-        # if ucbt < 0:
-        #     print("aaaa")
-        """
-        the powerpoint adds 1 to parent_node.visits abowe i assume this is to avoid div/0 errors 
-        """
-        return ucbt
-
-    def _rapid_b(self,
-                 num,
-                 num_won_with_n):
-        return (num_won_with_n) / (1 + num + num_won_with_n + (4 * self.exploration_b * num * num_won_with_n))
-
-    def calculate_RAPID_value(self,
-                              search_node_parent: _SearchNode,
-                              search_node: _SearchNode,
-                              node: MonteCarloTreeNode,
-                              parent_node: MonteCarloTreeNode,
-                              rapid_maps: RapidMaps):
-        action = search_node.action_from_parent
-        if search_node_parent.state.current_player_turn() == 0:
-            num_won_with_move = rapid_maps.rapid_win_map[action[0]][action[1]]
-        else:
-            num_won_with_move = rapid_maps.rapid_lose_map[action[0]][action[1]]
-        num_with_move = rapid_maps.rapid_move_count_map[action[0]][action[1]]
-        l1 = (1 - self._rapid_b(node.visits, num_with_move)) * (num_won_with_move / (node.visits + 1))
-        l2 = (self._rapid_b(node.visits, num_with_move)) * (num_won_with_move / (node.visits + 1))
-        l3 = self.exploration_c * np.sqrt(np.divide(np.log1p(parent_node.visits), (node.visits + 1)))
-
-        return l1 + l2 + l3
 
     def get_first_terminal_child(self,
                                  search_node):
@@ -250,15 +255,26 @@ class MontecarloTreeSearch:
 
         self.node_map = {}
 
-        # TODO: FIX HARDCODE
-        zeroed_board = environment.get_initial_state().hex_board
-        self.rapid_map = RapidMaps(zeroed_board)
-
-        pass
+        self.critic_eval_frac = 0
 
     ################################
     #          Utilitys            #
     ################################
+
+    def _calculate_critic_eval_frac(self):
+        critic: Critic = self.agent.critic
+
+        if len(critic.latest_set_loss_list) < 5:
+            for _ in range(10):
+                critic.latest_set_loss_list.insert(0, 100)
+
+        last_5_loss_avg = sum(critic.latest_set_loss_list[-5:]) / 5
+        if last_5_loss_avg < 0.10:
+            critic_prob = max((1 - last_5_loss_avg), 0) / 4
+        else:
+            critic_prob = 0
+
+        return critic_prob
 
     def _concurrency_tickler(self):
         value = None
@@ -266,7 +282,7 @@ class MontecarloTreeSearch:
             # if there are more slots left try to fetch and continue if no one is free
             # TODO: mabye loop this to fetch untill the que is empty
             try:
-                value = self.from_worker_message_que.get_nowait()
+                value: StateValuePropegator = self.from_worker_message_que.get_nowait()
             except queue.Empty as e:
                 pass
         else:
@@ -276,52 +292,60 @@ class MontecarloTreeSearch:
         if value is not None:
             # if we got a value from the que apply it to the current tree
             self.active_p_semaphore -= 1
-            self._apply_node_change_list(value)
+            self._apply_value_propegator(value)
 
     def _paralell_rollout(self,
                           child,
-                          update_list):
+                          value_prop):
         self.active_p_semaphore += 1
-        self.to_workers_message_que.put((child.state, update_list))
+        self.to_workers_message_que.put((child.state, value_prop, self.critic_eval_frac))
 
     ################################
     #       Node management        #
     ################################
 
-    def _apply_node_change_list(self,
-                                change_list):
-        prop_val = change_list[0]
-        last_state = change_list.pop()
-
-        # TODO: hardcode
+    def _apply_value_propegator(self,
+                                value_prop: StateValuePropegator):
+        prop_val = value_prop.value
+        # TODO: URGENT figure out why the last and second element of the change list are equal
         # print(change_list)
-        self.rapid_map.update_maps(last_state.hex_board, prop_val)
-
-        for node_hash in change_list[1:]:
+        # change_list.pop(-1)
+        for node_hash in value_prop.rollout_nodes_state_hashes:
             node = self._get_node_by_hash(node_hash)
-            # s_node: _SearchNode = self.search_node_map.get(node_hash)
-            # if s_node is not None:
-            #     s_node.has_been_rolled_out = True
-
             node.visits += 1
-            if prop_val == 1:
-                node.p1_wins += 1
-            else:
-                node.p2_wins += 1
+            node.value += prop_val
+
+        for node_hash in value_prop.tree_search_node_state_hashes:
+            node = self._get_node_by_hash(node_hash)
+
+            node.value += prop_val
+            if not value_prop.tree_search_nodes_has_visits_pre_propegated:
+                node.visits += 1
+
+    def _pre_apply_tree_search_node_visits(self,
+                                           value_prop):
+        if value_prop.tree_search_nodes_has_visits_pre_propegated:
+            raise Exception("illigal state")
+
+        value_prop.tree_search_nodes_has_visits_pre_propegated ^= True
+
+        for node_hash in value_prop.tree_search_node_state_hashes:
+            node = self._get_node_by_hash(node_hash)
+            node.visits += 1
 
     def _get_node_by_state(self,
-                           state: GameBaseState) -> MonteCarloTreeNode:
+                           state: BoardGameBaseState) -> NodeValueCounter:
         node = self.node_map.get(hash(state))
         if node is None:
-            node = MonteCarloTreeNode()
+            node = NodeValueCounter()
             self.node_map[hash(state)] = node
         return node
 
     def _get_node_by_hash(self,
-                          node_hash) -> MonteCarloTreeNode:
+                          node_hash) -> NodeValueCounter:
         node = self.node_map.get(node_hash)
         if node is None:
-            node = MonteCarloTreeNode()
+            node = NodeValueCounter()
             self.node_map[node_hash] = node
         return node
 
@@ -358,7 +382,7 @@ class MontecarloTreeSearch:
 
         search_nodes = []
         for action in possible_actions:
-            new_s, r, done = self.environment.act(search_node.state, action)
+            new_s, r, done = self.environment.act(search_node.state, action, inplace=False)
 
             new_search_node = _SearchNode(
                 state=new_s,
@@ -380,43 +404,9 @@ class MontecarloTreeSearch:
 
         search_node.children = search_nodes
 
-    def _tree_search_old(self,
-                         parent: _SearchNode,
-                         update_list: [],
-                         d=0):
-
-        if self.debug:
-            print("tree search depth at: ", d)
-            d += 1
-
-        if parent.terminal:
-            update_list.insert(0, parent.reward)
-            update_list.append(parent.node_hash)
-            self._apply_node_change_list(change_list=update_list)
-        else:
-            if self.e_greedy.should_pick_greedy(increment_round=True):
-                child: _SearchNode = self.pick_child(parent)
-            else:
-                child: _SearchNode = random.choice(parent.children)
-            update_list.append(child.node_hash)
-
-            if child.has_been_rolled_out:  # and random.random() < 0.5:
-                if not child.has_been_expanded:
-                    self._expand_node(child)
-
-                self._tree_search(parent=child, update_list=update_list, d=d)
-            else:
-                # update_list = self._paralell_rollout(child)
-                if child.terminal:
-                    update_list.insert(0, child.reward)
-                    update_list.append(child.node_hash)
-                    self._apply_node_change_list(change_list=update_list)
-                else:
-                    self._paralell_rollout(child, update_list)
-
     def _tree_search(self,
                      parent: _SearchNode,
-                     update_list: [],
+                     value_prop: StateValuePropegator,
                      d=0):
         d += 1
 
@@ -427,10 +417,9 @@ class MontecarloTreeSearch:
         # check if any of the children are terminal if so pick them
         terminal_child = self.tree_policy.get_first_terminal_child(parent)
         if terminal_child is not None:
-            update_list.insert(0, terminal_child.reward)
-            update_list.append(terminal_child.node_hash)
-            update_list.append(parent.state)
-            self._apply_node_change_list(change_list=update_list)
+            value_prop.value = terminal_child.reward
+            value_prop.tree_search_node_state_hashes.append(terminal_child.node_hash)
+            self._apply_value_propegator(value_prop=value_prop)
             return
 
         # else use the default tree policy to pick the child and add it to the update list
@@ -438,7 +427,8 @@ class MontecarloTreeSearch:
             child: _SearchNode = self.pick_child(parent)
         else:
             child: _SearchNode = random.choice(parent.children)
-        update_list.append(child.node_hash)
+
+        value_prop.tree_search_node_state_hashes.append(child.node_hash)
 
         # if the child has been rolled out we continue down the tree
         if child.has_been_rolled_out:
@@ -446,10 +436,17 @@ class MontecarloTreeSearch:
             if not child.has_been_expanded:
                 self._expand_node(child)
 
-            self._tree_search(parent=child, update_list=update_list, d=d)
+            self._tree_search(parent=child, value_prop=value_prop, d=d)
         else:
             # if the child has not been rolled out we roll it out
-            self._paralell_rollout(child, update_list)
+            # self._paralell_rollout(child, update_list)
+            self._pre_apply_tree_search_node_visits(value_prop)
+            self._paralell_rollout(child, value_prop)
+
+            # value = self.agent.critic.get_state_value(child.state)[0]
+            # update_list.insert(0, value)
+            # update_list.append(child.node_hash)
+            # self._apply_node_change_list(change_list=update_list)
 
     def pick_child(self,
                    search_node: _SearchNode):
@@ -466,7 +463,7 @@ class MontecarloTreeSearch:
         if player_0_turn:
             best_child_value = 0
         else:
-            best_child_value = 0  # float("inf")
+            best_child_value = float("inf")
 
         # while not found:
         ## find candidate ##
@@ -480,7 +477,7 @@ class MontecarloTreeSearch:
                 continue
 
             node = self._get_node_by_hash(child.node_hash)
-            confidence_bound = self.tree_policy.calculate_upper_confidence_bound_node_value(node, parent_node)
+            confidence_bound = calculate_upper_confidence_bound_node_value(self.exploration_c, node.visits, parent_node.visits)
             # confidence_bound = self.tree_policy.calculate_RAPID_value(
             #     search_node_parent=search_node,
             #     search_node=child,
@@ -491,13 +488,15 @@ class MontecarloTreeSearch:
             # print(confidence_bound)
             node = self._get_node_by_hash(child.node_hash)
             if player_0_turn:
-                val = (node.p1_wins / (node.visits + 1)) + confidence_bound
+                # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) + confidence_bound
+                val = (node.value / (node.visits + 1)) + confidence_bound
                 if val > best_child_value:
                     best_child_value = val
                     best_child = child
             else:
-                val = (node.p2_wins / (node.visits + 1)) + confidence_bound
-                if val > best_child_value:
+                # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) - confidence_bound
+                val = (node.value / (node.visits + 1)) - confidence_bound
+                if val < best_child_value:
                     best_child_value = val
                     best_child = child
 
@@ -513,9 +512,13 @@ class MontecarloTreeSearch:
 
     def mc_tree_search(self,
                        num_rollouts,
-                       root_state: GameBaseState):
+                       root_state: BoardGameBaseState):
+
         root_s_node: _SearchNode = self.search_node_map.get(hash(root_state))
-        root_node = self._get_node_by_state(root_state)
+        root_node = self._get_node_by_hash(hash(root_state))
+
+        self.critic_eval_frac = 0  # self._calculate_critic_eval_frac()
+        print(f"Using a critic eval frac of {self.critic_eval_frac * 100}%")
 
         self.e_greedy = EGreedy(
             init_val=1,
@@ -533,6 +536,21 @@ class MontecarloTreeSearch:
 
         if not root_s_node.has_been_expanded:
             self._expand_node(root_s_node)
+
+        # reset the visit counts to avoid polluting the action selection
+
+        # possible_actions = self.environment.get_valid_actions(root_s_node.state)
+        # # print("parent ", hash(root_state))
+        # for action in possible_actions:
+        # for child in root_s_node.children:
+        #     # child_s, r, done = self.environment.act(root_state, action)
+        #
+        #     c_node: NodeValueCounter = self._get_node_by_hash(hash(child.state))
+        #     # print("child ", hash(child.state))
+        #     # print(c_node.value)
+        #     # print(c_node.visits)
+        #     c_node.value = 0
+        #     c_node.visits = 0
 
         # check if possible to end
         winning_c = None
@@ -553,42 +571,64 @@ class MontecarloTreeSearch:
 
             return ret, None
         else:
-            for i in range(num_rollouts):
+            wait_milli_sec = self.agent.ms_tree_search_time
+            c_time = time.monotonic_ns()
+            stop_t = c_time + (wait_milli_sec * 1000000)
+            rnds = 0
+            # for i in range(num_rollouts):
+
+            while time.monotonic_ns() < stop_t:
+                rnds += 1
+
+                value_prop = StateValuePropegator()
+                value_prop.tree_search_node_state_hashes.append(root_s_node.node_hash)
+
                 self._concurrency_tickler()
-                self._tree_search(parent=root_s_node, update_list=[root_s_node.node_hash])
+                self._tree_search(parent=root_s_node, value_prop=value_prop)
                 # for k, v in self.node_map.items():
                 #     print(f"{v.value} visits to node {k.get_as_vec()}")
                 # print("node_visits: ", [a.value for a in self.node_map.values()])
 
+            print(f"completed {rnds} rollouts in the {wait_milli_sec}ms limit")
             if self.debug:
-                print(f"parent visits: {root_node.visits}, value: {root_node.p1_wins}")
+                print(f"parent visits: {root_node.visits}, value: {root_node.value}")
+                v_count_sum = 0
                 for c in root_s_node.children:
                     node = self._get_node_by_hash(c.node_hash)
-                    rapid_v = self.tree_policy.calculate_RAPID_value(
-                        search_node_parent=root_s_node,
-                        search_node=c,
-                        node=node,
-                        parent_node=root_node,
-                        rapid_maps=self.rapid_map
-                    )
-                    print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits an {node.p1_wins} value -> value {node.p1_wins / (node.visits + 1)} + {self.tree_policy.calculate_upper_confidence_bound_node_value(node, root_node)}")
+                    v_count_sum += node.visits
+
+                    # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
+                    print("action {} -> {} node visits: {:<4} value: {:<5}  Q(s,a): {:<4.4} ".format(
+                        c.action_from_parent, c.state.get_as_vec(), node.visits, node.value, (node.value + 1) / (node.visits + 1)
+                    ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
+                print(f"v count sum: {v_count_sum}")
 
             while self.active_p_semaphore > 0:
                 change_list = self.from_worker_message_que.get()
-                self._apply_node_change_list(change_list)
+                self._apply_value_propegator(change_list)
                 self.active_p_semaphore -= 1
             ret = {}  # ehhhh
             ret_2_electric_bogaloo = {}  # ehhhh
+
+            max_v, max_a = 0, None
 
             for child in root_s_node.children:
                 child_s_node: _SearchNode = child
                 node = self._get_node_by_hash(child_s_node.node_hash)
                 ret[child.action_from_parent] = node.visits
+
+                if node.visits > max_v:
+                    max_a = child_s_node.action_from_parent
+                    max_v = node.visits
+
                 # TODO: CONFIUGURE FROM ELSWHERE
                 if node.visits > 0:
-                    val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
+                    # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
+                    val = node.value
                     v = (val / node.visits)
                     ret_2_electric_bogaloo[child.state] = v
+
+            # print(self.node_map)
 
             return ret, ret_2_electric_bogaloo
 

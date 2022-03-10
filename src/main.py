@@ -10,6 +10,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from enviorments.hex.hex_game import HexGameEnvironment, make_random_hex_board, invert
+from rl_agent.mc_tree_search import min_max_search, probe_n
 from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 
 # import multiprocessing
@@ -18,102 +19,28 @@ import torch
 
 def main():
     torch.set_num_threads(1)
-    import os
-
-    # from concurrent.futures import ProcessPoolExecutor
-    # from multiprocessing import JoinableQueue, Queue, Process
-    #
-    # executor = ProcessPoolExecutor()
-    # a = [0 for _ in range(10)]
-    #
-    #
-    # def abc(tr,
-    #         que: Queue):
-    #     while True:
-    #         val = que.get(block=True)
-    #         time.sleep(0.5)
-    #         print(tr, val)
-    #
-    #
-    # futures = []
-    # que = Queue()
-    # for n in range(3):
-    #     # f = executor.submit(abc, n, que)
-    #     p = Process(target=abc, args=(n, que))
-    #     p.start()
-    #     # futures.append(f)
-    #
-    # for i in range(10):
-    #     que.put(i)
-    #     time.sleep(0.3)
-    #
-    # time.sleep(10)
-    # for future in futures:
-    #     r = future.cancel()
-    #     print(r)
-
-    # print(a)
 
     env = HexGameEnvironment(5)
 
     agent = MonteCarloTreeSearchAgent(
-        num_rollouts=3000,
+        num_rollouts=1000,
+        ms_tree_search_time=800,
         environment=env,
         worker_thread_count=10,
-        exploration_c=math.sqrt(2)
+        exploration_c=math.sqrt(2),
+        topp_saves=10
     )
 
-    agent.run_topp(500)
-    # agent.debug = True
-
-    # s = env.get_initial_state()
-    # board = make_random_hex_board(5)
-    # s.hex_board = board
-    # env.display_state(s)
-    #
-    # inverted_board = copy.deepcopy(board)
-    #
-    # axis_size = len(board)
-    # for x in range(axis_size):
-    #     for y in range(axis_size):
-    #         inverted_board[x][y] = invert(board[y][x])
-    # s2 = copy.deepcopy(s)
-    # s2.hex_board = inverted_board
-    # env.display_state(s2)
-    #
-
-    #
-    # pd = agent.get_prob_dists([s, s2])
-    # s_mod = copy.deepcopy(pd[1])
-    #
-    # for x in range(axis_size):
-    #     for y in range(axis_size):
-    #         s_mod[(x * axis_size) + y] = pd[1][(y * axis_size) + x]
-    #
-    # print("pd 0:     ", pd[0])
-    # print("pd 1:     ", pd[1])
-    # print("pd 1 inv: ", s_mod)
-    #
-    # exit()
-
-    # print(torch.cuda.is_available())
-
-    model_fp = "saved_models/model_5x5_test"
+    model_fp = "saved_models/model_5x5_vers_3"
     # model_fp = None
     agent.load_model_from_fp(model_fp)
 
     agent.display = True
     agent.debug = True
-    # agent.run_episode()
-    # agent.display = False
-    # agent.debug = False
-    # exit()
 
-    # agent.train_n_episodes(10)
-    # agent.display = True
-    # agent.train_n_episodes(500, model_fp)
-
-    # agent.train_n_episodes(10, model_fp)
+    agent.train_n_episodes(100, model_fp)
+    agent.run_topp(100, num_games=1000)
+    exit()
 
     if False:
         plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
@@ -127,7 +54,7 @@ def main():
     agent.debug = True
     # agent.display = True
     # agent.train_n_episodes(5)
-    agent.play_against_human()
+    # agent.play_against_human()
 
     # init_s = env.get_initial_state()
     # init_s.hex_board = [[1, 1, -1], [1, 1, -1], [-1, -1, 1]]
