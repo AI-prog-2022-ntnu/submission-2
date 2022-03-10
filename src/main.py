@@ -24,14 +24,14 @@ def main():
 
     agent = MonteCarloTreeSearchAgent(
         num_rollouts=1000,
-        ms_tree_search_time=800,
+        ms_tree_search_time=900,
+        topp_saves=10,
         environment=env,
-        worker_thread_count=10,
         exploration_c=math.sqrt(2),
-        topp_saves=10
+        worker_thread_count=10,
     )
 
-    model_fp = "saved_models/model_5x5_vers_3"
+    model_fp = "saved_models/model_5x5_vers_4"
     # model_fp = None
     agent.load_model_from_fp(model_fp)
 

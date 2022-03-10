@@ -64,7 +64,8 @@ class CriticNeuralNet(nn.Module):
         #     # nn.Softmax()
         # ).to(device=self.device_used)
 
-        self.opt = torch.optim.Adam(self.parameters())
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.0002)
+        # self.opt = torch.optim.SGD(self.parameters(), lr=0.01)
         self.b_size = b_size
 
     def forward(self,
@@ -196,8 +197,8 @@ class Critic:
         # torch.set_printoptions(profile="full", linewidth=1000)
         loss_fn = torch.nn.L1Loss()  # .cuda(device_used)
         # opt = torch.optim.Adam(model.parameters())
-        passes_over_data = 50
-        batch_size = 10
+        passes_over_data = 20
+        batch_size = 4
         train_itrs = math.ceil((len(values) * passes_over_data) / batch_size)
 
         x_list, y_list = [], []

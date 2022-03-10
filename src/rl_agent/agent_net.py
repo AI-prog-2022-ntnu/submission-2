@@ -13,7 +13,7 @@ class ActorNeuralNetwork(nn.Module):
                  b_size):
         super(ActorNeuralNetwork, self).__init__()
 
-        self.inp_s = inp_s
+        self.inp_s = inp_s + 1
         self.train_device = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # self.network = nn.Sequential(
@@ -28,10 +28,10 @@ class ActorNeuralNetwork(nn.Module):
         # )
 
         self.network = nn.Sequential(
-            nn.Linear(inp_s * 2, 100),
-            nn.ReLU(),
+            nn.Linear((self.inp_s * 2), 100),
+            nn.Sigmoid(),
             nn.Linear(100, out_s),
-            nn.ReLU(),
+            nn.Sigmoid(),
             # nn.ReLU()  # <- DONT CHANGE
             # nn.Tanh()
             # nn.Softmax()
@@ -63,16 +63,21 @@ class ActorNeuralNetwork(nn.Module):
         # )
         self.loss_fn = torch.nn.CrossEntropyLoss()
         self.opt = torch.optim.Adam(self.parameters(), lr=0.0002)
+        # self.opt = torch.optim.SGD(self.parameters(), lr=0.01)
         self.b_size = b_size
 
     def forward(self,
                 inp_x,
-                use_cuda=False):
+                use_cuda=False,
+                ):
         if use_cuda:
             x = inp_x.to(device=self.train_device)
         else:
             x = inp_x
-        zero_inp = torch.where(x == 0, 1, 0)
+
+        zero_inp = torch.where(x[:, :-1] == 0, 1, 0)
+
+        # exit()
 
         p1_inp = torch.where(x == 1, 1.0, 0.0)
         p2_inp = torch.where(x == -1, 1.0, 0.0)
@@ -80,7 +85,7 @@ class ActorNeuralNetwork(nn.Module):
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
 
         # x = p_stack.view((-1, 2, self.b_size, self.b_size))
-        x = p_stack.view((-1, self.inp_s * 2))
+        x = p_stack.view((-1, (self.inp_s * 2)))
         # print(x)
         # print(x.dtype)
         # x.type(torch.LongTensor)

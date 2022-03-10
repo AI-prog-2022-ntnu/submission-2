@@ -95,20 +95,22 @@ class MonteCarloTreeSearchAgent:
         # loss_fn = torch.nn.CrossEntropyLoss()
         # opt = torch.optim.Adam(model.parameters())
 
-        passes_over_data = 400
-        batch_size = 10
+        passes_over_data = 70
+        batch_size = 3
         train_itrs = math.ceil((len(r_buffer) * passes_over_data) / batch_size)
         # print(train_itrs)
 
         inp_x, inp_y = [], []
         for state, v_count_map in r_buffer:
-            if state.current_player_turn == 0:
-                inp_x.append(state.get_as_vec())
-                inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=False))
-            else:
-                inp_x.append(state.get_as_inverted_vec())
-                inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=True))
-
+            inp_x.append([*state.get_as_vec(), state.current_player_turn()])
+            inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=False))
+            # if state.current_player_turn == 0:
+            #     inp_x.append(state.get_as_vec())
+            #     inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=False))
+            # else:
+            #     inp_x.append(state.get_as_inverted_vec())
+            #     inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=True))
+            #
         self.loss_hist.extend(self.model.train_network(inp_x, inp_y, train_itrs, batch_size))
         # for _ in range(train_itrs):
         #     x, y = generate_batch(inp_x, inp_y, batch_size)
@@ -392,17 +394,17 @@ class MonteCarloTreeSearchAgent:
 
             topp.register_policy(self, v, run_tornament=True)
 
-        actor_loss = pandas.DataFrame(self.loss_hist)
-        actor_loss.to_csv(fp + "_actor_loss.csv")
-        critic_loss = pandas.DataFrame(self.critic.loss_hist)
-        critic_loss.to_csv(fp + "_critic_loss.csv")
+            actor_loss = pandas.DataFrame(self.loss_hist)
+            actor_loss.to_csv(fp + "_actor_loss.csv", index=False)
+            critic_loss = pandas.DataFrame(self.critic.loss_hist)
+            critic_loss.to_csv(fp + "_critic_loss.csv", index=False)
         print()
         self.save_actor_critic_to_fp(fp)
 
     def get_prob_dists(self,
                        state_list: []):
 
-        x = [state.get_as_vec() if state.current_player_turn() == 0 else state.get_as_inverted_vec() for state in state_list]
+        x = [[*state.get_as_vec(), state.current_player_turn()] for state in state_list]
 
         prob_dist = self.model.forward(torch.tensor(x, dtype=torch.float))
 
@@ -420,12 +422,14 @@ class MonteCarloTreeSearchAgent:
             for øyeblikket tar jeg bare trekket som er minst gunsig for spiller 1 men kan være lurt og sjekke forsjellen når vi endrer dette
         """
 
-        if state.current_player_turn() == 0:
-            x = state.get_as_vec()
-            pass
-        else:
-            x = state.get_as_inverted_vec()
-        prob_dist = self.model.forward(torch.tensor([x], dtype=torch.float))[0]
+        # if state.current_player_turn() == 0:
+        #     x = state.get_as_vec()
+        #     pass
+        # else:
+        #     x = state.get_as_inverted_vec()
+
+        x = state.get_as_vec()
+        prob_dist = self.model.forward(torch.tensor([[*x, state.current_player_turn()]], dtype=torch.float))[0]
 
         if torch.any(torch.isnan(prob_dist)):
             print("na in dist: inp: ", x)
@@ -454,11 +458,11 @@ class MonteCarloTreeSearchAgent:
             #             target_val = v
             action_idx = prob_dist.index(target_val)
 
-            if state.current_player_turn() == 0:
-                action = self.environment.get_action_space_list()[action_idx]
-            else:
-                action_inv = self.environment.get_action_space_list()[action_idx]
-                action = (action_inv[1], action_inv[0])
+            # if state.current_player_turn() == 0:
+            action = self.environment.get_action_space_list()[action_idx]
+            # else:
+            #     action_inv = self.environment.get_action_space_list()[action_idx]
+            #     action = (action_inv[1], action_inv[0])
 
         leagal_actions = self.environment.get_valid_actions(state)
         if action not in leagal_actions:
@@ -505,17 +509,23 @@ class TOPP:
             model.save_actor_critic_to_fp(self._model_save_path(itr))
 
             if run_tornament:
-                self.run_tournaments()
+                self._single_model_tournament(itr)
+
+    def _only_single_model_tornament(self,
+                                     itr):
+        pass
 
     def _tornament_model_pick_action(self,
                                      state,
-                                     model):
-        if state.current_player_turn() == 0:
-            x = state.get_as_vec()
-        else:
-            x = state.get_as_inverted_vec()
+                                     model,
+                                     ):
+        # if state.current_player_turn() == 0:
+        #     x = state.get_as_vec()
+        # else:
+        #     x = state.get_as_inverted_vec()
+        x = state.get_as_vec()
 
-        prob_dist = model.forward(torch.tensor([x], dtype=torch.float))[0]
+        prob_dist = model.forward(torch.tensor([[*x, state.current_player_turn()]], dtype=torch.float))[0]
         prob_dist = prob_dist.tolist()
 
         if sum(prob_dist) == 0:
@@ -524,70 +534,99 @@ class TOPP:
             target_val = max(prob_dist)
             action_idx = prob_dist.index(target_val)
 
-            if state.current_player_turn() == 0:
-                action = self.environment.get_action_space_list()[action_idx]
-            else:
-                action_inv = self.environment.get_action_space_list()[action_idx]
-                action = (action_inv[1], action_inv[0])
+            action = self.environment.get_action_space_list()[action_idx]
+            # if state.current_player_turn() == 0:
+            #     action = self.environment.get_action_space_list()[action_idx]
+            # else:
+            #     action_inv = self.environment.get_action_space_list()[action_idx]
+            #     action = (action_inv[1], action_inv[0])
 
         return action
 
-    def run_tournaments(self):
-        used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
-        competition_pairs = list(itertools.combinations(used_save_p, 2))
-
-        leader_board = {k: (0, 0) for k in used_save_p}
+    def _torney(self,
+                pl1,
+                pl2,
+                leader_board):
 
         input_s = self.environment.get_observation_space_size()
         output_s = self.environment.get_action_space_size()
         xs = math.floor(math.sqrt(input_s))
 
-        for pl1, pl2 in competition_pairs:
-            p1_score = 0
-            p2_score = 0
-            model_1 = ActorNeuralNetwork.load_model(self._model_save_path(pl1), input_s, output_s, xs)
-            model_2 = ActorNeuralNetwork.load_model(self._model_save_path(pl2), input_s, output_s, xs)
-            # print(f"iter {pl1} vs {pl2}")
+        p1_score = 0
+        p2_score = 0
+        model_1 = ActorNeuralNetwork.load_model(self._model_save_path(pl1), input_s, output_s, xs)
+        model_2 = ActorNeuralNetwork.load_model(self._model_save_path(pl2), input_s, output_s, xs)
+        # print(f"iter {pl1} vs {pl2}")
 
-            for n in range(self.num_games_in_matches):
-                game_done = False
-                game_state: BoardGameBaseState = self.environment.get_initial_state()
+        for n in range(self.num_games_in_matches):
+            game_done = False
+            game_state: BoardGameBaseState = self.environment.get_initial_state()
 
-                # 50% chance for model 2 to start
-                if random.random() > 0.5:
-                    game_state.change_turn()
+            # 50% chance for model 2 to start
+            if random.random() > 0.5:
+                game_state.change_turn()
 
-                while not game_done:
-                    if game_state.current_player_turn() == 0:
-                        action = self._tornament_model_pick_action(game_state, model_1)
-                    else:
-                        action = self._tornament_model_pick_action(game_state, model_2)
-                    game_state, r, game_done = self.environment.act(game_state, action, inplace=True)
-
-                if r == 1:
-                    p1_score += 1
-                    winner = pl1
-                    loser = pl2
-                elif r == -1:
-                    p2_score += 1
-                    winner = pl2
-                    loser = pl1
+            while not game_done:
+                if game_state.current_player_turn() == 0:
+                    action = self._tornament_model_pick_action(game_state, model_1)
                 else:
-                    raise Exception("state error")
+                    action = self._tornament_model_pick_action(game_state, model_2)
+                game_state, r, game_done = self.environment.act(game_state, action, inplace=True)
 
-                leader_board[winner] = (leader_board[winner][0] + 1, leader_board[winner][1])
-                leader_board[loser] = (leader_board[loser][0], leader_board[loser][1] + 1)
+            if r == 1:
+                p1_score += 1
+                winner = pl1
+                loser = pl2
+            elif r == -1:
+                p2_score += 1
+                winner = pl2
+                loser = pl1
+            else:
+                raise Exception("state error")
 
-                frac_p1 = (p1_score + 1) / (p2_score + p1_score + 2)
-                p1_bar = math.floor(frac_p1 * 100) * "|"
-                p2_bar = math.floor((1 - frac_p1) * 100) * "|"
-                print("iter: \u001b[32m{:<5}\u001b[0m -{:->4}-> \u001b[32m{}\u001b[31m{}\u001b[0m <-{:-<4}-iter: \u001b[31m{:>5}\u001b[0m".format(pl1,
-                                                                                                                                                  p1_score,
-                                                                                                                                                  p1_bar,
-                                                                                                                                                  p2_bar,
-                                                                                                                                                  p2_score,
-                                                                                                                                                  pl2) + " " * 100, end="\r")
-            print()
+            leader_board[winner] = (leader_board[winner][0] + 1, leader_board[winner][1])
+            leader_board[loser] = (leader_board[loser][0], leader_board[loser][1] + 1)
+
+            frac_p1 = (p1_score + 1) / (p2_score + p1_score + 2)
+            p1_bar = math.floor(frac_p1 * 100) * "|"
+            p2_bar = math.floor((1 - frac_p1) * 100) * "|"
+            print("iter: \u001b[32m{:<5}\u001b[0m -{:->4}-> \u001b[32m{}\u001b[31m{}\u001b[0m <-{:-<4}-iter: \u001b[31m{:>5}\u001b[0m".format(pl1,
+                                                                                                                                              p1_score,
+                                                                                                                                              p1_bar,
+                                                                                                                                              p2_bar,
+                                                                                                                                              p2_score,
+                                                                                                                                              pl2) + " " * 100, end="\r")
+        print()
+
+    def _single_model_tournament(self,
+                                 itr):
+        used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
+        pairs = []
+        for n in used_save_p:
+            if n != itr:
+                pairs.append((itr, n))
+
+        leader_board = {k: (0, 0) for k in used_save_p}
+
+        for pl1, pl2 in pairs:
+            self._torney(pl1, pl2, leader_board)
+
+        print("#" * 10)
+        print(f"total {len(pairs)} matches each agent plays {self.num_models_to_save}")
+        best = list(sorted([(v[0], k) for k, v in leader_board.items()]))
+
+        for value, key in best:
+            wins, losses = leader_board[key]
+            print(f"iteration {key} won: {wins} loss: {losses} matches")
+
+    def run_tournaments(self, ):
+        used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
+        competition_pairs = list(itertools.combinations(used_save_p, 2))
+
+        leader_board = {k: (0, 0) for k in used_save_p}
+
+        for pl1, pl2 in competition_pairs:
+            self._torney(pl1, pl2, leader_board)
 
         print("#" * 10)
         print(f"total {len(competition_pairs)} matches each agent plays {self.num_models_to_save}")

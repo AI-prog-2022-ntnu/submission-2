@@ -589,20 +589,6 @@ class MontecarloTreeSearch:
                 #     print(f"{v.value} visits to node {k.get_as_vec()}")
                 # print("node_visits: ", [a.value for a in self.node_map.values()])
 
-            print(f"completed {rnds} rollouts in the {wait_milli_sec}ms limit")
-            if self.debug:
-                print(f"parent visits: {root_node.visits}, value: {root_node.value}")
-                v_count_sum = 0
-                for c in root_s_node.children:
-                    node = self._get_node_by_hash(c.node_hash)
-                    v_count_sum += node.visits
-
-                    # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
-                    print("action {} -> {} node visits: {:<4} value: {:<5}  Q(s,a): {:<4.4} ".format(
-                        c.action_from_parent, c.state.get_as_vec(), node.visits, node.value, (node.value + 1) / (node.visits + 1)
-                    ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
-                print(f"v count sum: {v_count_sum}")
-
             while self.active_p_semaphore > 0:
                 change_list = self.from_worker_message_que.get()
                 self._apply_value_propegator(change_list)
@@ -611,23 +597,52 @@ class MontecarloTreeSearch:
             ret_2_electric_bogaloo = {}  # ehhhh
 
             max_v, max_a = 0, None
-
+            v_sum = 0
             for child in root_s_node.children:
                 child_s_node: _SearchNode = child
                 node = self._get_node_by_hash(child_s_node.node_hash)
                 ret[child.action_from_parent] = node.visits
 
+                v_sum += node.visits
                 if node.visits > max_v:
                     max_a = child_s_node.action_from_parent
                     max_v = node.visits
 
                 # TODO: CONFIUGURE FROM ELSWHERE
-                if node.visits > 0:
+                if node.visits > 200:
                     # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
                     val = node.value
                     v = (val / node.visits)
                     ret_2_electric_bogaloo[child.state] = v
 
+            print(f"completed {rnds} rollouts in the {wait_milli_sec}ms limit")
+            if self.debug:
+                p_dists = self.agent.get_prob_dists([root_s_node.state])[0]
+
+                print(f"parent visits: {root_node.visits}, value: {root_node.value}")
+                v_count_sum = 0
+                for c in root_s_node.children:
+                    node = self._get_node_by_hash(c.node_hash)
+                    v_count_sum += node.visits
+
+                    action_idx = self.environment.get_action_space_list().index((c.action_from_parent))
+                    p_dist_val = p_dists[action_idx]
+                    critic_q_val = self.agent.critic.get_state_value(c.state)[0]
+
+                    # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
+                    print("action {} ->  node visits: {:<4} value: {:<5} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<8.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
+                        c.action_from_parent,
+                        # c.state.get_as_vec(),
+                        node.visits,
+                        node.value,
+                        p_dist_val,
+                        node.visits / v_sum,
+                        p_dist_val - (node.visits / v_sum),
+                        critic_q_val,
+                        (node.value + 1) / (node.visits + 1),
+                        critic_q_val - ((node.value + 1) / (node.visits + 1))
+                    ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
+                print(f"v count sum: {v_count_sum}")
             # print(self.node_map)
 
             return ret, ret_2_electric_bogaloo
