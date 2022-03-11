@@ -17,7 +17,7 @@ class BaseEnvironment:
         """
         :param state: current state
         :param action: the action to take
-        :param inplace: wheter to change the state inplace or copy it. defaults to false
+        :param inplace: whether to change the state inplace or copy it. defaults to false
         :return: (the new state of the environment, the reward for the step, flag indicating whether the episode is done)
         """
         pass
