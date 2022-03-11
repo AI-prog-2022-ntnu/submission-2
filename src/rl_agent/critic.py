@@ -25,47 +25,45 @@ class CriticNeuralNet(nn.Module):
         #     nn.Tanh(),
         # )o
 
-        self.network = nn.Sequential(
-            nn.Linear(inp_s * 2, 100),
-            nn.Tanh(),
-            nn.Linear(100, 1),
-
-            # nn.ReLU()  # <- DONT CHANGE
-            # nn.Tanh()
-            # nn.Softmax()
-        )
+        # self.network = nn.Sequential(
+        #     nn.Linear(inp_s * 2, 200),
+        #     nn.Tanh(),
+        #     nn.Linear(200, 1),
+        #
+        #     # nn.ReLU()  # <- DONT CHANGE
+        #     # nn.Tanh()
+        #     # nn.Softmax()
+        # )
 
         self.loss_fn = torch.nn.L1Loss().to(device=self.device_used)
 
-        # self.network = nn.Sequential(
-        #     nn.Conv2d(
-        #         in_channels=2,
-        #         out_channels=10,
-        #         kernel_size=(5, 5),
-        #         padding=2,
-        #         # stride=2
-        #     ),
-        #     # nn.Hardtanh(),
-        #     nn.ReLU(),
-        #     nn.Conv2d(
-        #         in_channels=10,
-        #         out_channels=30,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear((b_size * b_size) * 30, 100),
-        #     nn.ReLU(),
-        #     nn.Linear(100, 1),
-        #     # nn.ReLU()  # <- DONT CHANGE
-        #     # nn.Tanh(),
-        #     # nn.Softmax()
-        # ).to(device=self.device_used)
+        self.network = nn.Sequential(
+            nn.Conv2d(
+                in_channels=2,
+                out_channels=10,
+                kernel_size=(5, 5),
+                padding=2,
+                # stride=2
+            ),
+            # nn.Hardtanh(),
+            nn.ELU(),
+            nn.Conv2d(
+                in_channels=10,
+                out_channels=30,
+                kernel_size=(3, 3),
+                padding=1
+                # stride=2
+            ),
+            nn.Flatten(),
+            nn.ELU(),
+            nn.Linear((b_size * b_size) * 30, 1),
+            # nn.ReLU()  # <- DONT CHANGE
+            # nn.Tanh(),
+            # nn.Softmax()
+        ).to(device=self.device_used)
 
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.0002)
-        # self.opt = torch.optim.SGD(self.parameters(), lr=0.01)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.00005)
+        # self.opt = torch.optim.SGD(self.parameters(), lr=0.001)
         self.b_size = b_size
 
     def forward(self,
@@ -82,8 +80,8 @@ class CriticNeuralNet(nn.Module):
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
 
-        # x = p_stack.view((-1, 2, self.b_size, self.b_size))
-        x = p_stack.view((-1, self.inp_s * 2))
+        x = p_stack.view((-1, 2, self.b_size, self.b_size))
+        # x = p_stack.view((-1, self.inp_s * 2))
 
         # x = x.view((-1, 1, self.b_size, self.b_size))
         return self.network(x)
@@ -215,7 +213,7 @@ class Critic:
         # x = torch.tensor(x_list, dtype=torch.float)
         # y = torch.tensor(y_list, dtype=torch.float)
         loss = self.model.train_network(x_list, y_list, train_itrs, batch_size)
-        self.loss_hist.extend(loss)
+        self.loss_hist.append(np.mean(loss))
         # pred = model.forward(x).cuda()
         # # print("y:    ", y)
         # # print("pred: ", pred)

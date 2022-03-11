@@ -6,14 +6,18 @@ from rl_agent.mc_tree_search import MontecarloTreeSearch
 from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 
 env = HexGameEnvironment(5)
+
 agent = MonteCarloTreeSearchAgent(
-    num_rollouts=2000,
+    num_rollouts=1000,
+    ms_tree_search_time=2000,
+    topp_saves=10,
     environment=env,
+    exploration_c=math.sqrt(2),
     worker_thread_count=10,
-    exploration_c=math.sqrt(2)
 )
 
-model_fp = "saved_models/model_5x5_test"
+model_fp = "saved_models/model_5x5_vers_4"
+# model_fp = None
 agent.load_model_from_fp(model_fp)
 
 mcts = MontecarloTreeSearch(

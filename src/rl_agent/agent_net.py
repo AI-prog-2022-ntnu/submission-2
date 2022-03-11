@@ -28,9 +28,9 @@ class ActorNeuralNetwork(nn.Module):
         # )
 
         self.network = nn.Sequential(
-            nn.Linear((self.inp_s * 2), 100),
+            nn.Linear((self.inp_s * 2), 200),
             nn.Sigmoid(),
-            nn.Linear(100, out_s),
+            nn.Linear(200, out_s),
             nn.Sigmoid(),
             # nn.ReLU()  # <- DONT CHANGE
             # nn.Tanh()
@@ -62,8 +62,8 @@ class ActorNeuralNetwork(nn.Module):
         #     # nn.Softmax()
         # )
         self.loss_fn = torch.nn.CrossEntropyLoss()
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.0002)
-        # self.opt = torch.optim.SGD(self.parameters(), lr=0.01)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.00005)
+        # self.opt = torch.optim.SGD(self.parameters(), lr=0.001)
         self.b_size = b_size
 
     def forward(self,

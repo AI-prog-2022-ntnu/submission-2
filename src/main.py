@@ -24,22 +24,23 @@ def main():
 
     agent = MonteCarloTreeSearchAgent(
         num_rollouts=1000,
-        ms_tree_search_time=900,
+        ms_tree_search_time=1000,
         topp_saves=10,
         environment=env,
-        exploration_c=math.sqrt(2),
+        # exploration_c=math.sqrt(2),
+        exploration_c=1,
         worker_thread_count=10,
     )
 
-    model_fp = "saved_models/model_5x5_vers_4"
+    model_fp = "saved_models/model_5x5_vers_5"
     # model_fp = None
     agent.load_model_from_fp(model_fp)
 
     agent.display = True
     agent.debug = True
 
-    agent.train_n_episodes(100, model_fp)
-    agent.run_topp(100, num_games=1000)
+    agent.train_n_episodes(1000, model_fp)
+    agent.run_topp(2000, num_games=1000)
     exit()
 
     if False:

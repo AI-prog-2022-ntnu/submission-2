@@ -95,8 +95,8 @@ class MonteCarloTreeSearchAgent:
         # loss_fn = torch.nn.CrossEntropyLoss()
         # opt = torch.optim.Adam(model.parameters())
 
-        passes_over_data = 70
-        batch_size = 3
+        passes_over_data = 20
+        batch_size = 2
         train_itrs = math.ceil((len(r_buffer) * passes_over_data) / batch_size)
         # print(train_itrs)
 
@@ -111,7 +111,8 @@ class MonteCarloTreeSearchAgent:
             #     inp_x.append(state.get_as_inverted_vec())
             #     inp_y.append(get_action_visit_map_as_target_vec(self.environment, action_visit_map=v_count_map, invert=True))
             #
-        self.loss_hist.extend(self.model.train_network(inp_x, inp_y, train_itrs, batch_size))
+        loss = self.model.train_network(inp_x, inp_y, train_itrs, batch_size)
+        self.loss_hist.append(np.mean(loss))
         # for _ in range(train_itrs):
         #     x, y = generate_batch(inp_x, inp_y, batch_size)
 
@@ -630,7 +631,7 @@ class TOPP:
 
         print("#" * 10)
         print(f"total {len(competition_pairs)} matches each agent plays {self.num_models_to_save}")
-        best = list(sorted([(v[0], k) for k, v in leader_board.items()]))
+        best = list(reversed(sorted([(v[0], k) for k, v in leader_board.items()])))
 
         for value, key in best:
             wins, losses = leader_board[key]

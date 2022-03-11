@@ -310,12 +310,14 @@ class MontecarloTreeSearch:
         # TODO: URGENT figure out why the last and second element of the change list are equal
         # print(change_list)
         # change_list.pop(-1)
-        for node_hash in value_prop.rollout_nodes_state_hashes:
+        for node_hash in reversed(value_prop.rollout_nodes_state_hashes):
+            prop_val *= 0.98
             node = self._get_node_by_hash(node_hash)
             node.visits += 1
             node.value += prop_val
 
-        for node_hash in value_prop.tree_search_node_state_hashes:
+        for node_hash in reversed(value_prop.tree_search_node_state_hashes):
+            prop_val *= 0.98
             node = self._get_node_by_hash(node_hash)
 
             node.value += prop_val
@@ -609,7 +611,7 @@ class MontecarloTreeSearch:
                     max_v = node.visits
 
                 # TODO: CONFIUGURE FROM ELSWHERE
-                if node.visits > 200:
+                if node.visits > 100:
                     # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
                     val = node.value
                     v = (val / node.visits)
@@ -630,7 +632,7 @@ class MontecarloTreeSearch:
                     critic_q_val = self.agent.critic.get_state_value(c.state)[0]
 
                     # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
-                    print("action {} ->  node visits: {:<4} value: {:<5} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<8.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
+                    print("action {} ->  node visits: {:<4} value: {:<7.3} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<8.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
                         c.action_from_parent,
                         # c.state.get_as_vec(),
                         node.visits,
@@ -639,8 +641,8 @@ class MontecarloTreeSearch:
                         node.visits / v_sum,
                         p_dist_val - (node.visits / v_sum),
                         critic_q_val,
-                        (node.value + 1) / (node.visits + 1),
-                        critic_q_val - ((node.value + 1) / (node.visits + 1))
+                        (node.value) / (node.visits),
+                        critic_q_val - ((node.value) / (node.visits))
                     ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
                 print(f"v count sum: {v_count_sum}")
             # print(self.node_map)
