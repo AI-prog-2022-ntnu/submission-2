@@ -497,13 +497,13 @@ class MontecarloTreeSearch:
             node = self._get_node_by_hash(child.node_hash)
             if player_0_turn:
                 # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) + confidence_bound
-                val = (node.value / (node.visits + 1)) + confidence_bound
+                val = ((node.value + 1) / (node.visits + 1)) + confidence_bound
                 if val > best_child_value:
                     best_child_value = val
                     best_child = child
             else:
                 # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) - confidence_bound
-                val = (node.value / (node.visits + 1)) - confidence_bound
+                val = ((node.value + 1) / (node.visits + 1)) - confidence_bound
                 if val < best_child_value:
                     best_child_value = val
                     best_child = child
@@ -560,18 +560,19 @@ class MontecarloTreeSearch:
         #     c_node.visits = 0
 
         # check if possible to end
-        winning_c = None
+
+        has_winning_c = False
         for c in root_s_node.children:
             if c.terminal:
-                winning_c = c
+                has_winning_c = True
                 break
 
-        if winning_c is not None:
+        if has_winning_c:
             ret = {}  # ehhhh
 
             for child in root_s_node.children:
                 child_s_node: _SearchNode = child
-                if winning_c.node_hash == child_s_node.node_hash:
+                if child_s_node.terminal:
                     ret[child.action_from_parent] = 1
                 else:
                     ret[child.action_from_parent] = 0
@@ -616,11 +617,13 @@ class MontecarloTreeSearch:
                     max_v = node.visits
 
                 # TODO: CONFIUGURE FROM ELSWHERE
-                if node.visits > 30:
-                    # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
-                    val = node.value
-                    v = (val / node.visits)
-                    ret_2_electric_bogaloo[child.state] = v
+                # if node.visits > 30:
+                #     # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
+                #     val = node.value
+                #     v = (val / node.visits)
+                #     ret_2_electric_bogaloo[child.state] = v
+
+            ret_2_electric_bogaloo[root_s_node.state] = root_node.value / root_node.visits
 
             print(f"completed {rnds} rollouts in the {wait_milli_sec}ms limit")
             if self.debug:
@@ -644,10 +647,10 @@ class MontecarloTreeSearch:
                         float(node.value),
                         p_dist_val,
                         node.visits / v_sum,
-                        p_dist_val - (node.visits / v_sum),
+                        p_dist_val - ((node.visits + 1) / (v_sum + 1)),
                         critic_q_val,
-                        (node.value) / (node.visits),
-                        critic_q_val - ((node.value) / (node.visits))
+                        (node.value + 1) / (node.visits + 1),
+                        critic_q_val - ((node.value + 1) / (node.visits + 1))
                     ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
                 print(f"v count sum: {v_count_sum}")
             # print(self.node_map)

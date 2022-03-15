@@ -23,24 +23,28 @@ def main():
     torch.set_num_threads(1)
 
     env = HexGameEnvironment(
-        board_size=4,
+        board_size=6,
         internal_board_size=10
     )
 
     actor_nn_config = NeuralNetworkConfig(
-        episode_train_time_ms=2000,
-        batch_size=5,
+        episode_train_time_ms=1000,
+        train_iterations=0,
+        data_passes=20,
+        batch_size=10,
         lr=None,
     )
 
     critic_nn_config = NeuralNetworkConfig(
-        episode_train_time_ms=2000,
-        batch_size=5,
+        episode_train_time_ms=1000,
+        train_iterations=0,
+        data_passes=20,
+        batch_size=10,
         lr=None,
     )
 
     agent = MonteCarloTreeSearchAgent(
-        ms_tree_search_time=500,
+        ms_tree_search_time=800,
         topp_saves=10,
         environment=env,
         # exploration_c=math.sqrt(2),
@@ -61,7 +65,11 @@ def main():
     agent.display = True
     agent.debug = True
 
-    agent.train_n_episodes(100, model_fp)
+    agent.train_n_episodes(
+        n=100,
+        fp=model_fp,
+        games_in_topp_matches=100
+    )
     agent.run_topp(100, num_games=100)
     exit()
 

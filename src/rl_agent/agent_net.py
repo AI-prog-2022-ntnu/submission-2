@@ -32,61 +32,65 @@ class BoardGameActorNeuralNetwork(nn.Module):
         else:
             self.input_size = input_size + 1
 
-        # self.network = nn.Sequential(
-        #     nn.Linear(self.input_size * 2, 200),
-        #     nn.ELU(),
-        #     nn.Linear(200, self.output_size),
-        #     # nn.Sigmoid(),
-        #     # nn.ReLU()  # <- DONT CHANGE
-        #     # nn.Tanh()
-        # )
         self.network = nn.Sequential(
-            nn.Conv2d(
-                in_channels=2,
-                out_channels=50,
-                kernel_size=(5, 5),
-                padding=2,
-                # stride=2
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=50,
-                out_channels=30,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
-            nn.MaxPool2d(
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=30,
-                out_channels=20,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=20,
-                out_channels=30,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
-            nn.Flatten(),
-            nn.Tanh(),
-            nn.Linear((input_size) * 30, self.output_size),
+            nn.Linear(self.input_size * 2, 400),
+            nn.Sigmoid(),
+            nn.Linear(400, 400),
+            nn.Sigmoid(),
+            nn.Linear(400, self.output_size),
+            # nn.Sigmoid(),
+            # nn.ReLU()  # <- DONT CHANGE
+            nn.Tanh()
         )
+        # self.network = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=2,
+        #         out_channels=50,
+        #         kernel_size=(5, 5),
+        #         padding=2,
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=50,
+        #         out_channels=30,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.MaxPool2d(
+        #         kernel_size=(3, 3),
+        #         padding=1,
+        #         stride=1
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=30,
+        #         out_channels=20,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=20,
+        #         out_channels=30,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.Flatten(),
+        #     nn.ReLU(),
+        #     nn.Linear((input_size) * 30, self.output_size),
+        # )
 
         self.soft_max = torch.nn.Softmax(dim=0)
-        self.loss_fn = torch.nn.CrossEntropyLoss()
+        # self.loss_fn = torch.nn.CrossEntropyLoss()
+        # self.loss_fn = torch.nn.L1Loss()
+        self.loss_fn = torch.nn.MSELoss()
         # self.opt = torch.optim.Adam(self.parameters())
-        self.opt = torch.optim.RMSprop(self.parameters(), lr=0.001)
-        # self.opt = torch.optim.SGD(self.parameters(), lr=0.001)
+        self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0001)
+        # self.opt = torch.optim.SGD(self.parameters(), lr=0.0001)
 
     def forward(self,
                 inp_x,
@@ -104,10 +108,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
 
-        # x_ys = math.floor(math.sqrt(self.input_size))
-        x = p_stack.view((-1, 2, self.board_size, self.board_size))
-
-        # x = p_stack.view((-1, self.input_size * 2))
+        # x = p_stack.view((-1, 2, self.board_size, self.board_size))
+        x = p_stack.view((-1, self.input_size * 2))
 
         out: torch.Tensor = self.network(x)
 
@@ -124,8 +126,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
                        inp_y):
         self.train(True)
 
-        x = torch.tensor(inp_x, dtype=torch.float)
-        y = torch.tensor(inp_y, dtype=torch.float)
+        x_inp = torch.tensor(inp_x, dtype=torch.float)
+        y_inp = torch.tensor(inp_y, dtype=torch.float)
 
         loss_values = []
 
@@ -133,21 +135,42 @@ class BoardGameActorNeuralNetwork(nn.Module):
         c_time = time.monotonic_ns()
         stop_t = c_time + (wait_milli_sec * 1000000)
         rnds = 0
-        # for i in range(num_rollouts):
+        stop = False
 
-        while time.monotonic_ns() < stop_t:
+        bs = 5
+        set_len = len(x_inp)
+        rest = set_len % bs
+        currs = 0
+
+        while not stop:
+            # while currs < set_len:
+            #     if (currs + bs) > set_len:
+            #         x = x_inp[:-rest]
+            #         y = y_inp[:-rest]
+            #     else:
+            #         x = x_inp[currs:currs + bs]
+            #         y = y_inp[currs:currs + bs]
+            #     currs += bs
+
             rnds += 1
-            rand_idx = torch.randint(len(x), (self.nn_config.batch_size,))
-            x = x[rand_idx]
-            y = y[rand_idx]
-            self.opt.zero_grad()
+            rand_idx = torch.randint(set_len, (self.nn_config.batch_size,))
+            x = x_inp[rand_idx]
+            y = y_inp[rand_idx]
 
             pred = self.forward(x)
+
             loss: torch.Tensor = self.loss_fn(pred, y)
             loss_values.append(loss.tolist())
 
             loss.backward()
             self.opt.step()
+            if self.nn_config.use_iter:
+                if self.nn_config.data_passes is not None:
+                    stop = (rnds / self.nn_config.batch_size) > self.nn_config.data_passes
+                else:
+                    stop = rnds > self.nn_config.train_iterations
+            else:
+                stop = time.monotonic_ns() > stop_t
 
         print(f"AGENT: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
         self.train(False)

@@ -54,6 +54,7 @@ class MonteCarloTreeSearchAgent:
 
         self.critic = Critic(
             nn_config=self.critic_nn_config,
+            environment=self.environment,
             input_size=self.nn_input_size,
         )
 
@@ -67,7 +68,7 @@ class MonteCarloTreeSearchAgent:
             self.model = model
 
             critic_fp = fp + "_critic"
-            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.nn_input_size)
+            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment, self.nn_input_size)
             self.critic.model = critic_model
 
             self.model.share_memory()
@@ -154,12 +155,12 @@ class MonteCarloTreeSearchAgent:
 
         if critic_train_map is not None:
             # x, y = [], []
-            for vec, val in critic_train_map.items():
+            for state, val in critic_train_map.items():
                 # print(val)
                 # x.append(vec)
                 # y.append(val)
                 # if vec.current_player_turn() == 0:
-                critic_train_set.append((vec.get_as_vec(), val))
+                critic_train_set.append((state, val))
 
         return next_s, r, game_done
 
@@ -193,7 +194,7 @@ class MonteCarloTreeSearchAgent:
                 current_state, r, game_done = player_2(current_state)
 
         if train_critic:
-            self.critic.train_network(critic_train_set)
+            self.critic.train_from_buffer(critic_train_set)
 
         did_win = self.environment.get_winning_player(current_state) == 0
         mcts.close_helper_threads()

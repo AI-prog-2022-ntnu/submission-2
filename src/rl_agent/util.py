@@ -4,8 +4,15 @@ import random
 class NeuralNetworkConfig:
     def __init__(self,
                  episode_train_time_ms,
+                 train_iterations,
                  batch_size,
-                 lr):
+                 lr,
+                 data_passes=None,
+                 use_iter=True
+                 ):
+        self.data_passes = data_passes
+        self.use_iter = use_iter
+        self.train_iterations = train_iterations
         self.lr = lr
         self.batch_size = batch_size
         self.episode_train_time_ms = episode_train_time_ms

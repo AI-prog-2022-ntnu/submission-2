@@ -517,7 +517,7 @@ class HexGameEnvironment(BoardGameEnvironment):
         green_w = _is_game_won(state, True)
         print("Red won: ", red_w)
         print("Green won: ", green_w)
-        print("stat vec: ", state.hex_board)
+        # print("stat vec: ", state.hex_board)
         pass
 
     def get_observation_space_size(self) -> int:
