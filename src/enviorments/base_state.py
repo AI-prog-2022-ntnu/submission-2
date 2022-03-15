@@ -9,6 +9,10 @@ class BaseState:
 
     @abstractmethod
     def get_as_vec(self) -> [float]:
+        """
+        returns the current state as a vector of the same size as the env observation space
+        :return:
+        """
         pass
 
     @abstractmethod
@@ -22,11 +26,13 @@ class BaseState:
 
 
 class BoardGameBaseState(BaseState):
-
     @abstractmethod
     def get_as_inverted_vec(self) -> [float]:
         """
-        return the board inverted i.e. player 1 pos -> player 2 pos
+        returns the the inverted state as a vector of the same size as the env observation space.
+        i.e. player 1's representation is switched to look like player 2's
+
+        this is usefull for training.
         :return:
         """
         pass

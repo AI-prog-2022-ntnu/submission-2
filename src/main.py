@@ -16,82 +16,54 @@ from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 # import multiprocessing
 import torch
 
+from rl_agent.util import NeuralNetworkConfig
+
 
 def main():
     torch.set_num_threads(1)
 
-    env = HexGameEnvironment(5)
+    env = HexGameEnvironment(
+        board_size=4,
+        internal_board_size=10
+    )
+
+    actor_nn_config = NeuralNetworkConfig(
+        episode_train_time_ms=2000,
+        batch_size=5,
+        lr=None,
+    )
+
+    critic_nn_config = NeuralNetworkConfig(
+        episode_train_time_ms=2000,
+        batch_size=5,
+        lr=None,
+    )
 
     agent = MonteCarloTreeSearchAgent(
-        num_rollouts=1000,
-        ms_tree_search_time=1000,
+        ms_tree_search_time=500,
         topp_saves=10,
         environment=env,
         # exploration_c=math.sqrt(2),
         exploration_c=1,
         worker_thread_count=10,
+        actor_nn_config=actor_nn_config,
+        critic_nn_config=critic_nn_config,
     )
 
-    model_fp = "saved_models/model_5x5_vers_5"
+    # init = env.get_initial_state()
+    # env.display_state(init)
+    # exit()
+
+    model_fp = "saved_models/model_10x10_vers_1"
     # model_fp = None
     agent.load_model_from_fp(model_fp)
 
     agent.display = True
     agent.debug = True
 
-    agent.train_n_episodes(1000, model_fp)
-    agent.run_topp(2000, num_games=1000)
+    agent.train_n_episodes(100, model_fp)
+    agent.run_topp(100, num_games=100)
     exit()
-
-    if False:
-        plot = sns.lineplot(x=list(range(len(agent.loss_hist))), y=agent.loss_hist)
-        plot.get_figure().savefig("out_actor.png")
-
-        plt.clf()
-
-        plot = sns.lineplot(x=list(range(len(agent.critic.loss_hist))), y=agent.critic.loss_hist)
-        plot.get_figure().savefig("out_critic.png")
-
-    agent.debug = True
-    # agent.display = True
-    # agent.train_n_episodes(5)
-    # agent.play_against_human()
-
-    # init_s = env.get_initial_state()
-    # init_s.hex_board = [[1, 1, -1], [1, 1, -1], [-1, -1, 1]]
-
-    # init_s.hex_board = [[1, -1, -1, 1], [-1, 1, 1, -1], [1, -1, 0, -1], [-1, 1, 1, 1]]
-    # init_s.get_as_inverted_vec()
-    # env.display_state(init_s)
-
-    # inverted
-    # init_s.hex_board = [[-1, 1, -1, 1], [1, -1, 1, -1], [1, -1, 0, -1], [-1, 1, 1, -1]]
-    # env.display_state(init_s)
-
-    # print(init_s.get_as_vec())
-    # print(init_s.get_as_inverted_vec())
-    # env.display_state(init_s)
-
-    # init_s = env.get_initial_state()
-    # env.display_state(init_s)
-
-    # num = 1000
-    # b_size = 16
-    # tb = []
-    # for _ in range(num):
-    #     x = [random.randint(0,1) for n in range(b_size)]
-    #     y = [random.random() for n in range(b_size)]
-    #     tb.append((x,y))
-    # agent = MonteCarloTreeSearchAgent(env)
-    #
-    # x = [random.randint(0, 1) for n in range(b_size)]
-    # init_s.hex_board[0][0] = 1
-    # a = agent.pick_action(init_s, env)
-    # print(a)
-    # agent.train_buffer = tb
-    # agent.train()
-    # env.display_state(init_s)
-    # print(env.is_state_won(init_s))
 
 
 if __name__ == '__main__':

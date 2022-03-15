@@ -1,6 +1,16 @@
 import random
 
 
+class NeuralNetworkConfig:
+    def __init__(self,
+                 episode_train_time_ms,
+                 batch_size,
+                 lr):
+        self.lr = lr
+        self.batch_size = batch_size
+        self.episode_train_time_ms = episode_train_time_ms
+
+
 class EGreedy:
     def __init__(self,
                  init_val,
@@ -43,7 +53,7 @@ def generate_batch(x,
 def get_action_visit_map_as_target_vec(environment,
                                        action_visit_map: {},
                                        invert=False):
-    possible_actions = environment.get_action_space_list()
+    possible_actions = environment.get_action_space()
     visit_sum = sum(action_visit_map.values())
 
     ret = []

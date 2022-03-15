@@ -25,6 +25,7 @@ class NodeValueCounter:
     def __init__(self):
         self.visits = 0
         self.value = 0
+        self.discounted_value = 0
         self.p1_wins = 0
         self.p2_wins = 0
 
@@ -230,6 +231,7 @@ class MontecarloTreeSearch:
         self.agent = agent
         self.environment = environment
         self.exploration_c = exploration_c
+        self.value_discount = 0.98
 
         self.search_node_map = {}
         self.debug = False
@@ -246,7 +248,8 @@ class MontecarloTreeSearch:
         self.e_greedy: EGreedy = None
 
         self.agent.model.share_memory()
-        e_greedy = EGreedy(init_val=0.5, min_val=0.01, rounds_to_min=10)
+        e_greedy = EGreedy(init_val=0.5, min_val=0.01, rounds_to_min=3)
+        # e_greedy = EGreedy(init_val=0, min_val=0.0, rounds_to_min=10)
         for _ in range(worker_thread_count):
             p = mp_context.Process(target=parallel_rollout, args=(self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy))
             p.start()
@@ -307,20 +310,23 @@ class MontecarloTreeSearch:
     def _apply_value_propegator(self,
                                 value_prop: StateValuePropegator):
         prop_val = value_prop.value
+        discounted_prop_val = value_prop.value
         # TODO: URGENT figure out why the last and second element of the change list are equal
         # print(change_list)
         # change_list.pop(-1)
         for node_hash in reversed(value_prop.rollout_nodes_state_hashes):
-            prop_val *= 0.98
+            discounted_prop_val *= self.value_discount
             node = self._get_node_by_hash(node_hash)
             node.visits += 1
             node.value += prop_val
+            node.discounted_value += prop_val
 
         for node_hash in reversed(value_prop.tree_search_node_state_hashes):
-            prop_val *= 0.98
+            discounted_prop_val *= self.value_discount
             node = self._get_node_by_hash(node_hash)
 
             node.value += prop_val
+            node.discounted_value += prop_val
             if not value_prop.tree_search_nodes_has_visits_pre_propegated:
                 node.visits += 1
 
@@ -513,7 +519,6 @@ class MontecarloTreeSearch:
             self.to_workers_message_que.put(None)
 
     def mc_tree_search(self,
-                       num_rollouts,
                        root_state: BoardGameBaseState):
 
         root_s_node: _SearchNode = self.search_node_map.get(hash(root_state))
@@ -525,7 +530,7 @@ class MontecarloTreeSearch:
         self.e_greedy = EGreedy(
             init_val=1,
             min_val=0.1,
-            rounds_to_min=math.floor((num_rollouts * 2) / 3),
+            rounds_to_min=math.floor((100 * 2) / 3),  # TODO: FIX IMPORTANT!
         )
 
         if root_s_node is None:
@@ -611,7 +616,7 @@ class MontecarloTreeSearch:
                     max_v = node.visits
 
                 # TODO: CONFIUGURE FROM ELSWHERE
-                if node.visits > 100:
+                if node.visits > 30:
                     # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
                     val = node.value
                     v = (val / node.visits)
@@ -619,7 +624,7 @@ class MontecarloTreeSearch:
 
             print(f"completed {rnds} rollouts in the {wait_milli_sec}ms limit")
             if self.debug:
-                p_dists = self.agent.get_prob_dists([root_s_node.state])[0]
+                p_dists = self.agent.model.get_probability_distribution([root_s_node.state])[0]
 
                 print(f"parent visits: {root_node.visits}, value: {root_node.value}")
                 v_count_sum = 0
@@ -627,16 +632,16 @@ class MontecarloTreeSearch:
                     node = self._get_node_by_hash(c.node_hash)
                     v_count_sum += node.visits
 
-                    action_idx = self.environment.get_action_space_list().index((c.action_from_parent))
+                    action_idx = self.environment.get_action_space().index((c.action_from_parent))
                     p_dist_val = p_dists[action_idx]
                     critic_q_val = self.agent.critic.get_state_value(c.state)[0]
 
                     # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
-                    print("action {} ->  node visits: {:<4} value: {:<7.3} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<8.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
+                    print("action {} ->  node visits: {:<4} value: {:<9.3f} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<9.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
                         c.action_from_parent,
                         # c.state.get_as_vec(),
                         node.visits,
-                        node.value,
+                        float(node.value),
                         p_dist_val,
                         node.visits / v_sum,
                         p_dist_val - (node.visits / v_sum),

@@ -1,3 +1,4 @@
+import itertools
 import marshal
 import random
 
@@ -339,11 +340,59 @@ def _get_free_positions(state: HexBoardGameState) -> [(int)]:
     return ret
 
 
-def _gen_inverted_action_space_list(asl):
-    ret = asl.c
+def _slice_active_board_from_internal(board,
+                                      slice_size):
+    sliced_board = []
+    for x in range(slice_size):
+        sliced_board.append(board[x][-slice_size:])
+
+    return sliced_board
 
 
 class HexGameEnvironment(BoardGameEnvironment):
+
+    def __init__(self,
+                 board_size,
+                 internal_board_size=10,
+                 player_0_value=1,
+                 player_1_value=- 1):
+        self.internal_board_size = internal_board_size
+        self.player_0_value = player_0_value
+        self.player_1_value = player_1_value
+        self.board_size = board_size
+        # self._action_space_list = self.get_valid_actions(self.get_initial_state())
+
+        val = []
+        for x in range(internal_board_size):
+            for y in range(internal_board_size):
+                val.append((x, y))
+        self._action_space_list = val
+
+        self._observation_space_inversion_map = self._gen_observation_space_inversion_map()
+
+    def _gen_observation_space_inversion_map(self):
+        observation_space_size = self.get_observation_space_size()
+        map = [0 for _ in range(observation_space_size)]
+
+        for x in range(self.internal_board_size):
+            for y in range(self.internal_board_size):
+                map[(x * self.internal_board_size) + y] = (x * self.internal_board_size) + y
+
+        return map
+
+    def invert_observation_space_vec(self,
+                                     observation_space_vec):
+        out = [0 for _ in range(self.get_observation_space_size())]
+        for idx, map_idx in enumerate(self._observation_space_inversion_map):
+            out[map_idx] = observation_space_vec[idx]
+        return out
+
+    def invert_action_space_vec(self,
+                                action_space_vec):
+        out = [0 for _ in range(self.get_observation_space_size())]
+        for idx, map_idx in enumerate(self._observation_space_inversion_map):
+            out[map_idx] = action_space_vec[idx]
+        return out
 
     def game_has_reversible_moves(self) -> bool:
         return True
@@ -358,17 +407,6 @@ class HexGameEnvironment(BoardGameEnvironment):
         state.hex_board[action[0]][action[1]] = 0
         state.change_turn()
         state.update_state_hash()
-
-    def __init__(self,
-                 board_size,
-                 player_0_value=1,
-                 player_1_value=- 1):
-        self.player_0_value = player_0_value
-        self.player_1_value = player_1_value
-        self.board_size = board_size
-        self._action_space_list = self.get_valid_actions(self.get_initial_state())
-
-        self.inverted_action_space_list = []
 
     def act(self,
             state: HexBoardGameState,
@@ -412,8 +450,8 @@ class HexGameEnvironment(BoardGameEnvironment):
         done = is_board_full or player_0_won or player_1_won
         return next_s, reward, done
 
-    def winning_player_id(self,
-                          state):
+    def get_winning_player(self,
+                           state):
 
         player_0_won = _is_game_won(state, team_0=True)
         player_1_won = _is_game_won(state, team_0=False)
@@ -430,15 +468,50 @@ class HexGameEnvironment(BoardGameEnvironment):
         return _get_free_positions(state)
 
     def get_initial_state(self) -> HexBoardGameState:
-        return HexBoardGameState(_make_hex_board(self.board_size))
+        if self.internal_board_size == self.board_size:
+            # board = _make_hex_board(self.board_size)
+            board = _make_hex_board(self.internal_board_size)
+        else:
+            diff = self.internal_board_size - self.board_size
+            # board = _make_hex_board(self.board_size)
+            board = _make_hex_board(self.internal_board_size)
+            cnt = diff
+            for x in range(self.internal_board_size):
+                num_green = 0
+                any_red = False
+
+                if x < self.board_size:
+                    num_green = diff
+                else:
+                    any_red = True
+                    num_green = max(cnt, 0)
+                    cnt -= 1
+
+                for y in range(self.internal_board_size):
+                    if num_green > 0:
+                        board[x][y] = 1
+                        num_green -= 1
+                    else:
+                        if any_red:
+                            board[x][y] = -1
+
+        return HexBoardGameState(board)
 
     def is_state_won(self,
                      state) -> bool:
         return _is_game_won(state, True)
 
     def display_state(self,
-                      state: HexBoardGameState):
-        _terminal_display_hex_board(state.hex_board)
+                      state: HexBoardGameState,
+                      display_internal=False):
+        if display_internal:
+            board = state.hex_board
+        else:
+            board = _slice_active_board_from_internal(
+                board=state.hex_board,
+                slice_size=self.board_size
+            )
+        _terminal_display_hex_board(board)
 
         red_w = _is_game_won(state, False)
         green_w = _is_game_won(state, True)
@@ -448,22 +521,18 @@ class HexGameEnvironment(BoardGameEnvironment):
         pass
 
     def get_observation_space_size(self) -> int:
-        return self.board_size ** 2
+        # return self.board_size ** 2
+        return self.internal_board_size ** 2
 
     def get_action_space_size(self) -> int:
-        return self.board_size ** 2
+        # return self.board_size ** 2
+        return self.internal_board_size ** 2
 
-    def get_action_space_list(self) -> []:
+    def get_action_space(self) -> []:
         return self._action_space_list
-
-    def get_inverted_action_space_list(self,
-                                       state: BaseState) -> [bool]:
-        state_act = self.get_valid_actions(state)
-        all_act = self.get_action_space_list()
-        return [act in state_act for act in all_act]
 
     def get_valid_action_space_list(self,
                                     state: BaseState) -> [bool]:
         state_act = self.get_valid_actions(state)
-        all_act = self.get_action_space_list()
+        all_act = self.get_action_space()
         return [act in state_act for act in all_act]

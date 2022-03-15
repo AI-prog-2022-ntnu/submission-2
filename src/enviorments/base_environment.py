@@ -9,6 +9,10 @@ The basis for an environment for the rl agent to act in
 
 class BaseEnvironment:
 
+    #
+    #   env interaction
+    #
+
     @abstractmethod
     def act(self,
             state,
@@ -22,14 +26,41 @@ class BaseEnvironment:
         """
         pass
 
+    #
+    #   env info
+    #
     @abstractmethod
-    def reverse_move(self,
-                     state,
-                     action):
+    def get_action_space_size(self) -> int:
         """
-        reverse the move inplace and return the state to its previos state
-        :param state:
-        :param action:
+        Returns the size of the action space for the environment
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_action_space(self) -> []:
+        """
+        Returns a list of all the possible actions in the environment
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_observation_space_size(self) -> int:
+        """
+        Returns the size of the observation space for the environment
+        :return:
+        """
+        pass
+
+    #
+    #   state info
+    #
+
+    @abstractmethod
+    def get_initial_state(self) -> BaseState:
+        """
+        Returns the initial state of the environment
         :return:
         """
         pass
@@ -46,9 +77,11 @@ class BaseEnvironment:
         pass
 
     @abstractmethod
-    def get_initial_state(self) -> BaseState:
+    def get_valid_action_space_list(self,
+                                    state: BaseState) -> [bool]:
         """
-        Returns the initial state of the environment
+        Returns a list of bool values indicating what actions in the get_action_space_list() actions are available
+        this is usefull for interacting with the neural network
         :return:
         """
         pass
@@ -57,21 +90,11 @@ class BaseEnvironment:
     def is_state_won(self,
                      state) -> bool:
         """
-        Returns if the provided state is won
+        Returns if the provided state is won for the current agent
         :param state:
         :return:
         """
         pass
-
-    @abstractmethod
-    def winning_player_id(self,
-                          state):
-        """
-        Returns the id of the player who has won the current state.
-        if the state is not won null is returned
-        :param state:
-        :return:
-        """
 
     @abstractmethod
     def display_state(self,
@@ -83,49 +106,39 @@ class BaseEnvironment:
         """
         pass
 
-    @abstractmethod
-    def get_observation_space_size(self) -> int:
-        """
-        Returns the size of the observation space for the environment
-        :return:
-        """
-        pass
-
-    @abstractmethod
-    def get_action_space_size(self) -> int:
-        """
-        Returns the size of the action space for the environment
-        :return:
-        """
-        pass
-
-    @abstractmethod
-    def get_action_space_list(self) -> []:
-        """
-        Returns a list of all the possible actions in the environment
-        :return:
-        """
-        pass
-
-    @abstractmethod
-    def get_inverted_action_space_list(self,
-                                       state: BaseState) -> []:
-        pass
-
-    @abstractmethod
-    def get_valid_action_space_list(self,
-                                    state: BaseState) -> [bool]:
-        """
-        Returns a list of bool values indicating witch of the get_action_space_list() actions are available
-        :return:
-        """
-        pass
-
 
 class BoardGameEnvironment(BaseEnvironment):
 
     @abstractmethod
+    def get_state_winning_move(self,
+                               state: BoardGameBaseState):
+        """
+        in some senarios one can quickly calculate if any of the next moves are a winning one. if this is possible
+        and sutch a move exist it will be returned, if not None is returned
+        :param state:
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def get_winning_player(self,
+                           state):
+        """
+        returns the winning player in the provided state
+        :return:
+        """
+
+    #
+    #   move reversal
+    #
+    @abstractmethod
     def game_has_reversible_moves(self) -> bool:
+        """
+        given: s1 -a1-> s2
+        in some games it is possible to navigate back to s1 from s2 given you know a1. in other games information
+        is lost after some actions. If the moves are reversible more effective tree traversal methods may be used
+        :return:
+        """
         pass
 
     @abstractmethod
@@ -133,17 +146,35 @@ class BoardGameEnvironment(BaseEnvironment):
                      state: BoardGameBaseState,
                      action) -> BoardGameBaseState:
         """
-
         if the game has reversible moves return the state with the move reversed
-        Args:
-            state:
-            action:
 
-        Returns:
-
+        :param state:
+        :param action:
+        :return:
         """
 
+        pass
+
+    #
+    # board inversal
+    #
+
     @abstractmethod
-    def get_state_winning_move(self,
-                               state: BoardGameBaseState):
+    def invert_observation_space_vec(self,
+                                     observation_space_vec):
+        """
+        invert the observation space vector. usually the input of the neural net
+        :param observation_space_vec:
+        :return:
+        """
+        pass
+
+    @abstractmethod
+    def invert_action_space_vec(self,
+                                action_space_vec):
+        """
+        invert the action space vector, usually the output of the neuralnet
+        :param observation_space_vec:
+        :return:
+        """
         pass
