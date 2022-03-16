@@ -69,10 +69,15 @@ class TOPP:
         if sum(prob_dist) == 0:
             action = random.choice(self.environment.get_valid_actions(state))
         else:
-            target_val = max(prob_dist)
-            action_idx = prob_dist.index(target_val)
+            action_space = self.environment.get_action_space()
+            idx = random.choices(range(len(action_space)), weights=prob_dist)[0]
 
-            action = self.environment.get_action_space()[action_idx]
+            action = action_space[idx]
+
+            # target_val = max(prob_dist)
+            # action_idx = prob_dist.index(target_val)
+            # action = self.environment.get_action_space()[action_idx]
+
             # if state.current_player_turn() == 0:
             #     action = self.environment.get_action_space_list()[action_idx]
             # else:
@@ -154,7 +159,7 @@ class TOPP:
 
         for value, key in best:
             wins, losses = leader_board[key]
-            print(f"iteration {key} won: {wins} loss: {losses} matches")
+            print("iteration {:<5} win /lose: \u001b[32m{:<6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins, losses))
 
     def run_tournaments(self, ):
         used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
@@ -171,4 +176,4 @@ class TOPP:
 
         for value, key in best:
             wins, losses = leader_board[key]
-            print(f"iteration {key} won: {wins} loss: {losses} matches")
+            print("iteration {:<5} win /lose: \u001b[32m{:<6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins, losses))

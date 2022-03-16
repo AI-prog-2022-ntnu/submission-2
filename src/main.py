@@ -23,7 +23,7 @@ def main():
     torch.set_num_threads(1)
 
     env = HexGameEnvironment(
-        board_size=6,
+        board_size=7,
         internal_board_size=10
     )
 
@@ -44,7 +44,7 @@ def main():
     )
 
     agent = MonteCarloTreeSearchAgent(
-        ms_tree_search_time=800,
+        ms_tree_search_time=3000,
         topp_saves=10,
         environment=env,
         # exploration_c=math.sqrt(2),
@@ -65,12 +65,12 @@ def main():
     agent.display = True
     agent.debug = True
 
-    agent.train_n_episodes(
-        n=100,
-        fp=model_fp,
-        games_in_topp_matches=100
-    )
-    agent.run_topp(100, num_games=100)
+    # agent.train_n_episodes(
+    #     n=500,
+    #     fp=model_fp,
+    #     games_in_topp_matches=100
+    # )
+    agent.run_topp(500, num_games=500)
     exit()
 
 

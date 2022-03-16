@@ -45,15 +45,15 @@ class BoardGameActorNeuralNetwork(nn.Module):
         # self.network = nn.Sequential(
         #     nn.Conv2d(
         #         in_channels=2,
-        #         out_channels=50,
+        #         out_channels=100,
         #         kernel_size=(5, 5),
         #         padding=2,
         #         # stride=2
         #     ),
-        #     nn.ReLU(),
+        #     nn.ELU(),
         #     nn.Conv2d(
-        #         in_channels=50,
-        #         out_channels=30,
+        #         in_channels=100,
+        #         out_channels=40,
         #         kernel_size=(3, 3),
         #         padding=1
         #         # stride=2
@@ -63,25 +63,27 @@ class BoardGameActorNeuralNetwork(nn.Module):
         #         padding=1,
         #         stride=1
         #     ),
-        #     nn.ReLU(),
+        #     nn.ELU(),
+        #     nn.Dropout2d(),
         #     nn.Conv2d(
-        #         in_channels=30,
+        #         in_channels=40,
         #         out_channels=20,
         #         kernel_size=(3, 3),
         #         padding=1
         #         # stride=2
         #     ),
-        #     nn.ReLU(),
+        #     nn.ELU(),
+        #     nn.Dropout2d(),
         #     nn.Conv2d(
         #         in_channels=20,
-        #         out_channels=30,
+        #         out_channels=20,
         #         kernel_size=(3, 3),
         #         padding=1
         #         # stride=2
         #     ),
         #     nn.Flatten(),
-        #     nn.ReLU(),
-        #     nn.Linear((input_size) * 30, self.output_size),
+        #     nn.ELU(),
+        #     nn.Linear((input_size) * 20, self.output_size),
         # )
 
         self.soft_max = torch.nn.Softmax(dim=0)
@@ -89,7 +91,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         # self.loss_fn = torch.nn.L1Loss()
         self.loss_fn = torch.nn.MSELoss()
         # self.opt = torch.optim.Adam(self.parameters())
-        self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0001)
+        self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0005)
         # self.opt = torch.optim.SGD(self.parameters(), lr=0.0001)
 
     def forward(self,

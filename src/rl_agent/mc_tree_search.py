@@ -248,7 +248,7 @@ class MontecarloTreeSearch:
         self.e_greedy: EGreedy = None
 
         self.agent.model.share_memory()
-        e_greedy = EGreedy(init_val=0.5, min_val=0.01, rounds_to_min=3)
+        e_greedy = EGreedy(init_val=0.8, min_val=0.01, rounds_to_min=3)
         # e_greedy = EGreedy(init_val=0, min_val=0.0, rounds_to_min=10)
         for _ in range(worker_thread_count):
             p = mp_context.Process(target=parallel_rollout, args=(self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy))
