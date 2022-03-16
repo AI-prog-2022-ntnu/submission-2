@@ -16,7 +16,7 @@ class CriticNeuralNet(nn.Module):
                  nn_config: NeuralNetworkConfig,
                  environment: BoardGameEnvironment,
                  input_size: int,
-                 invert_p2=True):
+                 invert_p2=False):
         super(CriticNeuralNet, self).__init__()
 
         self.environment = environment
@@ -25,48 +25,174 @@ class CriticNeuralNet(nn.Module):
         self.b_size = math.floor(math.sqrt(input_size))  # TODO: FIX IMPORTANT!
         self.nn_config = nn_config
 
+        # self.network = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=2,
+        #         out_channels=100,
+        #         kernel_size=(5, 5),
+        #         padding=1,
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=100,
+        #         out_channels=40,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.MaxPool2d(
+        #         kernel_size=(3, 3),
+        #         padding=1,
+        #         stride=1
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=40,
+        #         out_channels=20,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=20,
+        #         out_channels=20,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.Flatten(),
+        #     nn.ELU(),
+        #     nn.Linear((input_size) * 20, 1),
+        # )
+        # self.network = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=2,
+        #         out_channels=10,
+        #         kernel_size=(5, 5),
+        #         padding=0,
+        #         stride=1,
+        #     ),  # size: -1,3,8,8
+        #     nn.ELU(),
+        #     nn.Conv2d(
+        #         in_channels=10,
+        #         out_channels=15,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ELU(),
+        #     nn.Conv2d(
+        #         in_channels=15,
+        #         out_channels=20,
+        #         kernel_size=(3, 3),
+        #         padding=1,
+        #         stride=1,
+        #     ),  # size: -1,40,8,8
+        #     nn.MaxPool2d(
+        #         kernel_size=(3, 3),
+        #         # padding=1,
+        #         stride=1
+        #     ),
+        #     nn.Conv2d(
+        #         in_channels=20,
+        #         out_channels=30,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ELU(),
+        #     nn.Conv2d(
+        #         in_channels=30,
+        #         out_channels=35,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.ELU(),
+        #     nn.Conv2d(
+        #         in_channels=35,
+        #         out_channels=40,
+        #         kernel_size=(3, 3),
+        #         padding=1
+        #         # stride=2
+        #     ),
+        #     nn.MaxPool2d(
+        #         kernel_size=(3, 3),
+        #         padding=1,
+        #         stride=1
+        #     ),  # -1, 40, 2,2
+        #     nn.ELU(),
+        #     nn.Flatten(),
+        #     nn.Linear((4 * 4) * 40, 200),
+        #     nn.ELU(),
+        #     nn.Linear(200, 1),
+        # )
+
+        k = 20
         self.network = nn.Sequential(
             nn.Conv2d(
                 in_channels=2,
-                out_channels=100,
+                out_channels=k,
                 kernel_size=(5, 5),
                 padding=2,
-                # stride=2
+                stride=1,
             ),
             nn.ReLU(),
             nn.Conv2d(
-                in_channels=100,
-                out_channels=40,
-                kernel_size=(3, 3),
-                padding=1
-                # stride=2
-            ),
-            nn.MaxPool2d(
+                in_channels=k,
+                out_channels=k,
                 kernel_size=(3, 3),
                 padding=1,
-                stride=1
+                stride=1,
             ),
             nn.ReLU(),
             nn.Conv2d(
-                in_channels=40,
-                out_channels=20,
+                in_channels=k,
+                out_channels=k,
                 kernel_size=(3, 3),
-                padding=1
-                # stride=2
+                padding=1,
+                stride=1,
             ),
             nn.ReLU(),
             nn.Conv2d(
-                in_channels=20,
-                out_channels=20,
+                in_channels=k,
+                out_channels=k,
                 kernel_size=(3, 3),
-                padding=1
-                # stride=2
+                padding=1,
+                stride=1,
             ),
-            nn.Flatten(),
-            nn.ELU(),
-            nn.Linear((input_size) * 20, 1),
-        )
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
 
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=1,
+                kernel_size=(1, 1),
+                padding=0,
+                stride=1,
+            ),
+            # nn.ELU(),
+            nn.Flatten(),
+            # nn.Dropout(),
+            nn.Linear((1 * 1 * 10 * 10), 1),
+            nn.Tanh(),
+        )
         self.loss_fn = torch.nn.L1Loss()
 
         # self.opt = torch.optim.Adam(self.parameters(), lr=0.00005)
@@ -84,6 +210,9 @@ class CriticNeuralNet(nn.Module):
 
         x = p_stack.view((-1, 2, self.b_size, self.b_size))
         out = self.network(x)
+
+        # print(out.size())
+        # exit()
 
         # x = p_stack.view((-1, self.inp_s * 2))
 
@@ -135,12 +264,11 @@ class CriticNeuralNet(nn.Module):
 
             loss.backward()
             self.opt.step()
-            if self.nn_config.use_iter:
-                if self.nn_config.data_passes is not None:
-                    stop = (rnds / self.nn_config.batch_size) > self.nn_config.data_passes
-                else:
-                    stop = rnds > self.nn_config.train_iterations
+            if self.nn_config.data_passes is not None:
+                stop = (rnds / self.nn_config.batch_size) > self.nn_config.data_passes
             else:
+                stop = rnds > self.nn_config.train_iterations
+            if stop_t is not None and not stop:
                 stop = time.monotonic_ns() > stop_t
 
         print(f"CRITIC: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
@@ -163,7 +291,7 @@ class CriticNeuralNet(nn.Module):
                 else:
                     x.append(state_vec)
             else:
-                x.append([*state_vec, state.current_player_turn()])
+                x.append(state_vec)
 
         return x, inverted_idx_list
 

@@ -29,11 +29,13 @@ class MonteCarloTreeSearchAgent:
                  actor_nn_config: NeuralNetworkConfig,
                  critic_nn_config: NeuralNetworkConfig,
                  worker_thread_count,
+                 worker_fork_number,
                  exploration_c,
                  topp_saves,
                  ms_tree_search_time
                  ):
         # TODO: implement layer config
+        self.worker_fork_number = worker_fork_number
         self.critic_nn_config = critic_nn_config
         self.actor_nn_config = actor_nn_config
         self.ms_tree_search_time = ms_tree_search_time
@@ -42,6 +44,7 @@ class MonteCarloTreeSearchAgent:
         self.worker_thread_count = worker_thread_count
         self.environment = environment
         self.train_buffer: [([int], [float])] = []
+        self.max_buffer_size = 1000
 
         self.model: BoardGameActorNeuralNetwork = None
         self._build_network()
@@ -91,6 +94,14 @@ class MonteCarloTreeSearchAgent:
         output_s = self.environment.get_action_space_size()
         b_size = math.floor(math.sqrt(input_s))
         self.model = BoardGameActorNeuralNetwork(self.actor_nn_config, self.environment, input_s, output_s)
+
+    def _expand_replay_buffer(self,
+                              buffer):
+        self.train_buffer = [*self.train_buffer, *buffer]
+        new_b_len = len(self.train_buffer)
+
+        if new_b_len > self.max_buffer_size:
+            self.train_buffer = self.train_buffer[(new_b_len - self.max_buffer_size):]
 
     def print_progress(self,
                        n,
@@ -177,7 +188,8 @@ class MonteCarloTreeSearchAgent:
             exploration_c=self.exploration_c,
             environment=self.environment,
             agent=self,
-            worker_thread_count=self.worker_thread_count
+            worker_thread_count=self.worker_thread_count,
+            worker_fork_number=self.worker_fork_number
         )
         mcts.debug = self.debug
         current_state = self.environment.get_initial_state()
@@ -193,11 +205,11 @@ class MonteCarloTreeSearchAgent:
             else:
                 current_state, r, game_done = player_2(current_state)
 
+        mcts.close_helper_threads()
         if train_critic:
             self.critic.train_from_buffer(critic_train_set)
 
         did_win = self.environment.get_winning_player(current_state) == 0
-        mcts.close_helper_threads()
 
         torch.set_num_threads(1)
         return replay_buffer, did_win
@@ -247,6 +259,26 @@ class MonteCarloTreeSearchAgent:
 
         topp.run_tournaments()
 
+    def run_self_training(self,
+                          num_games: int,
+                          topp_saves,
+                          lr: float,
+                          discount: float):
+        topp = TOPP(
+            total_itrs=num_games,
+            actor_nn_config=self.actor_nn_config,
+            num_games_in_matches=200,
+            num_models_to_save=topp_saves,
+            environment=self.environment)
+
+        topp.training_torney(
+            actor_model=self.model,
+            num_games=num_games,
+            lr=lr,
+            discount=discount
+
+        )
+
     def train_n_episodes(self,
                          n,
                          fp=None,
@@ -267,12 +299,13 @@ class MonteCarloTreeSearchAgent:
                 flip_start=flip,
                 train_critic=True
             )
+            self._expand_replay_buffer(r_buf)
             if win:
                 win_count.append(1)
             else:
                 win_count.append(0)
 
-            loss = self.model.train_from_state_buffer(r_buf)
+            loss = self.model.train_from_state_buffer(self.train_buffer)
             # self.loss_hist.append(np.mean(loss))
             self.loss_hist.extend(loss)
 
@@ -294,7 +327,7 @@ class MonteCarloTreeSearchAgent:
 
     def pick_action(self,
                     state: BoardGameBaseState,
-                    get_prob_not_max=False):
+                    use_prob_not_max=False):
 
         """
         TODO: usikker på den her, mpt player 1/2. 
@@ -323,21 +356,17 @@ class MonteCarloTreeSearchAgent:
 
         # if all probs are zero pick a random value
         # TODO: implement the some action picker
-        if sum(prob_dist) == 0 or get_prob_not_max:
+        if sum(prob_dist) == 0:
             action = random.choice(self.environment.get_valid_actions(state))
         else:
-            target_val = max(prob_dist)
+            action_space = self.environment.get_action_space()
+            if use_prob_not_max:
+                action_idx = random.choices(range(len(action_space)), weights=prob_dist)[0]
+            else:
+                target_val = max(prob_dist)
+                action_idx = prob_dist.index(target_val)
 
-            # print(prob_dist)
-            # else:
-            #     target_val = float("inf")
-            #     for v in prob_dist:
-            #         if v < target_val and v != 0:
-            #             target_val = v
-            action_idx = prob_dist.index(target_val)
-
-            # if state.current_player_turn() == 0:
-            action = self.environment.get_action_space()[action_idx]
+            action = action_space[action_idx]
             # else:
             #     action_inv = self.environment.get_action_space_list()[action_idx]
             #     action = (action_inv[1], action_inv[0])
