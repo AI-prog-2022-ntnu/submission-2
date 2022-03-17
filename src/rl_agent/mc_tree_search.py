@@ -2,20 +2,14 @@ import math
 # import multiprocessing
 import queue
 import random
-import copy
 import time
+from multiprocessing import Queue
 
 import numpy as np
-import torch
-
-from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
-
-from concurrent.futures import ProcessPoolExecutor
-
-from multiprocessing import Queue
 from torch import multiprocessing as mp
 
+from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
+from enviorments.base_state import BoardGameBaseState
 # executor = ProcessPoolExecutor()
 from rl_agent.critic import Critic
 from rl_agent.util import EGreedy
@@ -61,17 +55,16 @@ class _SearchNode:
         self.state = state
 
 
-def probe_n(
-        state: BoardGameBaseState,
-        environment: BaseEnvironment,
-        n
-):
+def probe_n(state: BoardGameBaseState, environment: BaseEnvironment, n):
+    """
+    Todo - figure out exactly what does. Is it used anymore?
+    Explores the current state recursively.
+    """
     possible_moves = environment.get_valid_actions(state)
     hit, val = 0, 0
     n -= 1
 
     for action in possible_moves:
-        # print(action)
         n_state, reward, done = environment.act(state, action, inplace=True)
         if done:
             val += reward
@@ -87,18 +80,16 @@ def probe_n(
     return hit, val
 
 
-def min_max_search(
-        state: BoardGameBaseState,
-        environment: BaseEnvironment,
-        current_max: bool,
-        d=0
-):
+def min_max_search(state: BoardGameBaseState, environment: BaseEnvironment, current_max: bool, d=0):
+    """
+    Todo - remove? Is it used
+    Does a min/mac search of the state.
+    """
     if d < 4:
         print("chk ", d)
     nd = d + 1
     possible_moves = environment.get_valid_actions(state)
     for action in possible_moves:
-        # print(action)
         n_state, reward, done = environment.act(state, action, inplace=True)
         if done:
             environment.reverse_move(n_state, action)
@@ -119,13 +110,12 @@ def min_max_search(
     return r
 
 
-def _parallel_mc_rollout(
-        state: BoardGameBaseState,
-        agent,
-        environment: BoardGameEnvironment,
-        value_prop: StateValuePropegator,
-        e_greedy: EGreedy,
-):
+def _parallel_mc_rollout(state: BoardGameBaseState, agent, environment: BoardGameEnvironment,
+                         value_prop: StateValuePropegator,
+                         e_greedy: EGreedy):
+    """
+    Searches to estimate the value of the state. Plays out from the state to a final state.
+    """
     state_hash = hash(state)
     winning_move = environment.get_state_winning_move(state)
     if winning_move is not None:
@@ -149,11 +139,10 @@ def _parallel_mc_rollout(
     value_prop.rollout_nodes_state_hashes.append(state_hash)
 
 
-def parallel_rollout(agent,
-                     env,
-                     in_que: Queue,
-                     out_que: Queue,
-                     e_greedy: EGreedy):
+def parallel_rollout(agent, env, in_que: Queue, out_que: Queue, e_greedy: EGreedy):
+    """
+    Searches to estimate the value of the state. Plays out from the state to a final state.
+    """
     run = True
     while run:
         msg = in_que.get()
@@ -173,15 +162,13 @@ def parallel_rollout(agent,
             run = False
 
 
-def calculate_upper_confidence_bound_node_value(exploration_c,
-                                                node_visits,
-                                                parent_visits):
+def calculate_upper_confidence_bound_node_value(exploration_c, node_visits, parent_visits):
     ucbt = exploration_c * np.sqrt(np.divide(np.log1p(parent_visits), (node_visits + 1)))
 
     return ucbt
 
 
-# this is super tight copled but practical
+# this is super tight coupled but practical
 class TreePolicy:
     def __init__(self,
                  exploration_c):
@@ -189,8 +176,7 @@ class TreePolicy:
         self.exploration_c = exploration_c
         self.exploration_b = exploration_c
 
-    def get_first_terminal_child(self,
-                                 search_node):
+    def get_first_terminal_child(self, search_node):
 
         if search_node.has_been_expanded:
             for c in search_node.children:
@@ -198,16 +184,14 @@ class TreePolicy:
                     return c
         return None
 
-    def will_lose_next(self,
-                       search_node: _SearchNode):
+    def will_lose_next(self, search_node: _SearchNode):
         if search_node.has_been_expanded:
             term = any(map(lambda x: x.terminal, search_node.children))
         else:
             term = False
         return term
 
-    def node_goodness(self,
-                      search_node: _SearchNode):
+    def node_goodness(self, search_node: _SearchNode):
         # leads directly to victory #
         if search_node.terminal:
             return 100
@@ -249,9 +233,9 @@ class MontecarloTreeSearch:
 
         self.agent.model.share_memory()
         e_greedy = EGreedy(init_val=0.5, min_val=0.01, rounds_to_min=3)
-        # e_greedy = EGreedy(init_val=0, min_val=0.0, rounds_to_min=10)
         for _ in range(worker_thread_count):
-            p = mp_context.Process(target=parallel_rollout, args=(self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy))
+            p = mp_context.Process(target=parallel_rollout, args=(
+                self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy))
             p.start()
 
         self.active_p_semaphore = 0
@@ -265,6 +249,9 @@ class MontecarloTreeSearch:
     ################################
 
     def _calculate_critic_eval_frac(self):
+        """
+        Todo - Remove? Is it used anymore?
+        """
         critic: Critic = self.agent.critic
 
         if len(critic.latest_set_loss_list) < 5:
@@ -280,16 +267,19 @@ class MontecarloTreeSearch:
         return critic_prob
 
     def _concurrency_tickler(self):
+        """
+        Todo - Find out why we are tickling the concurrency.
+        """
         value = None
         if self.active_p_semaphore < self.worker_thread_count + 5:
             # if there are more slots left try to fetch and continue if no one is free
-            # TODO: mabye loop this to fetch untill the que is empty
+            # TODO: maybe loop this to fetch until the que is empty
             try:
                 value: StateValuePropegator = self.from_worker_message_que.get_nowait()
             except queue.Empty as e:
                 pass
         else:
-            # if all the slots are full wait untill a worker is done
+            # if all the slots are full wait until a worker is done
             value = self.from_worker_message_que.get()
 
         if value is not None:
@@ -297,9 +287,7 @@ class MontecarloTreeSearch:
             self.active_p_semaphore -= 1
             self._apply_value_propegator(value)
 
-    def _paralell_rollout(self,
-                          child,
-                          value_prop):
+    def _paralell_rollout(self, child, value_prop):
         self.active_p_semaphore += 1
         self.to_workers_message_que.put((child.state, value_prop, self.critic_eval_frac))
 
@@ -307,8 +295,7 @@ class MontecarloTreeSearch:
     #       Node management        #
     ################################
 
-    def _apply_value_propegator(self,
-                                value_prop: StateValuePropegator):
+    def _apply_value_propegator(self, value_prop: StateValuePropegator):
         prop_val = value_prop.value
         discounted_prop_val = value_prop.value
         # TODO: URGENT figure out why the last and second element of the change list are equal
@@ -330,8 +317,7 @@ class MontecarloTreeSearch:
             if not value_prop.tree_search_nodes_has_visits_pre_propegated:
                 node.visits += 1
 
-    def _pre_apply_tree_search_node_visits(self,
-                                           value_prop):
+    def _pre_apply_tree_search_node_visits(self, value_prop):
         if value_prop.tree_search_nodes_has_visits_pre_propegated:
             raise Exception("illigal state")
 
@@ -341,16 +327,14 @@ class MontecarloTreeSearch:
             node = self._get_node_by_hash(node_hash)
             node.visits += 1
 
-    def _get_node_by_state(self,
-                           state: BoardGameBaseState) -> NodeValueCounter:
+    def _get_node_by_state(self, state: BoardGameBaseState) -> NodeValueCounter:
         node = self.node_map.get(hash(state))
         if node is None:
             node = NodeValueCounter()
             self.node_map[hash(state)] = node
         return node
 
-    def _get_node_by_hash(self,
-                          node_hash) -> NodeValueCounter:
+    def _get_node_by_hash(self, node_hash) -> NodeValueCounter:
         node = self.node_map.get(node_hash)
         if node is None:
             node = NodeValueCounter()
@@ -485,7 +469,8 @@ class MontecarloTreeSearch:
                 continue
 
             node = self._get_node_by_hash(child.node_hash)
-            confidence_bound = calculate_upper_confidence_bound_node_value(self.exploration_c, node.visits, parent_node.visits)
+            confidence_bound = calculate_upper_confidence_bound_node_value(self.exploration_c, node.visits,
+                                                                           parent_node.visits)
             # confidence_bound = self.tree_policy.calculate_RAPID_value(
             #     search_node_parent=search_node,
             #     search_node=child,
@@ -640,18 +625,19 @@ class MontecarloTreeSearch:
                     critic_q_val = self.agent.critic.get_state_value(c.state)[0]
 
                     # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
-                    print("action {} ->  node visits: {:<4} value: {:<9.3f} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<9.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
-                        c.action_from_parent,
-                        # c.state.get_as_vec(),
-                        node.visits,
-                        float(node.value),
-                        p_dist_val,
-                        node.visits / v_sum,
-                        p_dist_val - ((node.visits + 1) / (v_sum + 1)),
-                        critic_q_val,
-                        (node.value + 1) / (node.visits + 1),
-                        critic_q_val - ((node.value + 1) / (node.visits + 1))
-                    ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
+                    print(
+                        "action {} ->  node visits: {:<4} value: {:<9.3f} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<9.4}  |critic Q(s,a)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
+                            c.action_from_parent,
+                            # c.state.get_as_vec(),
+                            node.visits,
+                            float(node.value),
+                            p_dist_val,
+                            node.visits / v_sum,
+                            p_dist_val - ((node.visits + 1) / (v_sum + 1)),
+                            critic_q_val,
+                            (node.value + 1) / (node.visits + 1),
+                            critic_q_val - ((node.value + 1) / (node.visits + 1))
+                        ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
                 print(f"v count sum: {v_count_sum}")
             # print(self.node_map)
 

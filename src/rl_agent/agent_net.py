@@ -1,14 +1,12 @@
 import math
-import random
 import time
 
-import numpy as np
 import torch
 from torch import nn
 
 from enviorments.base_environment import BoardGameEnvironment
 from enviorments.base_state import BoardGameBaseState
-from rl_agent.util import NeuralNetworkConfig, get_action_visit_map_as_target_vec
+from rl_agent.util import NeuralNetworkConfig
 
 
 class BoardGameActorNeuralNetwork(nn.Module):
@@ -92,9 +90,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0001)
         # self.opt = torch.optim.SGD(self.parameters(), lr=0.0001)
 
-    def forward(self,
-                inp_x,
-                ):
+    def forward(self, inp_x):
         x = inp_x
 
         if self.invert_p2:
@@ -121,9 +117,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
         return out_soft_masked
 
-    def _train_network(self,
-                       inp_x,
-                       inp_y):
+    def _train_network(self, inp_x, inp_y):
         self.train(True)
 
         x_inp = torch.tensor(inp_x, dtype=torch.float)
@@ -172,7 +166,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
             else:
                 stop = time.monotonic_ns() > stop_t
 
-        print(f"AGENT: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
+        print(
+            f"AGENT: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
         self.train(False)
         return loss_values
 

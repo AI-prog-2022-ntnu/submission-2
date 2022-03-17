@@ -1,12 +1,9 @@
-import math
 import random
 
-import numpy as np
 import torch
-from torch import nn
 
 from enviorments.base_environment import BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
+from enviorments.base_state import BoardGameBaseState
 from rl_agent.critic_net import CriticNeuralNet
 from rl_agent.util import NeuralNetworkConfig
 

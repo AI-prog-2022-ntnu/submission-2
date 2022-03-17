@@ -47,7 +47,6 @@ def main():
         ms_tree_search_time=800,
         topp_saves=10,
         environment=env,
-        # exploration_c=math.sqrt(2),
         exploration_c=1,
         worker_thread_count=10,
         actor_nn_config=actor_nn_config,

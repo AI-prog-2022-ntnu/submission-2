@@ -1,25 +1,19 @@
-import itertools
 import math
 import random
-import os
+from os import path
 
-import numpy as np
 import pandas
 import torch
-from torch import nn
 
-from abc import abstractmethod
-from os import path
-from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
-
+from enviorments.base_environment import BoardGameEnvironment
+from enviorments.base_state import BoardGameBaseState
 # TODO: generalize
 # TODO: have not checked that this actually works at all
 from rl_agent.agent_net import BoardGameActorNeuralNetwork
 from rl_agent.critic import Critic, CriticNeuralNet
 from rl_agent.mc_tree_search import MontecarloTreeSearch
 from rl_agent.tournament_of_progressive_policies import TOPP
-from rl_agent.util import generate_batch, get_action_visit_map_as_target_vec, NeuralNetworkConfig
+from rl_agent.util import get_action_visit_map_as_target_vec, NeuralNetworkConfig
 
 
 class MonteCarloTreeSearchAgent:
@@ -60,15 +54,19 @@ class MonteCarloTreeSearchAgent:
 
         self.critic.model.share_memory()
 
-    def load_model_from_fp(self,
-                           fp):
+    def load_model_from_fp(self, fp):
+        """
+        Loads the already trained model from a binary file saved in the folder "saved_models".
+        """
         if fp is not None and path.exists(fp):
             output_size = self.environment.get_action_space_size()
-            model = BoardGameActorNeuralNetwork.load_model(fp, self.actor_nn_config, self.environment, self.nn_input_size, output_size)
+            model = BoardGameActorNeuralNetwork.load_model(fp, self.actor_nn_config, self.environment,
+                                                           self.nn_input_size, output_size)
             self.model = model
 
             critic_fp = fp + "_critic"
-            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment, self.nn_input_size)
+            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment,
+                                                      self.nn_input_size)
             self.critic.model = critic_model
 
             self.model.share_memory()
@@ -78,24 +76,24 @@ class MonteCarloTreeSearchAgent:
             print("path not found model not loaded")
             print("#" * 10)
 
-    def save_actor_critic_to_fp(self,
-                                fp):
+    def save_actor_critic_to_fp(self, fp):
+        """
+        Saves the critic to a binary file in the folder "saved_models".
+        """
         if fp is not None:
             critic_fp = fp + "_critic"
             self.model.save_model(fp)
             self.critic.model.save_model(critic_fp)
 
     def _build_network(self):
-
+        """
+        Builds the neural network.
+        """
         input_s = self.environment.get_observation_space_size()
         output_s = self.environment.get_action_space_size()
-        b_size = math.floor(math.sqrt(input_s))
         self.model = BoardGameActorNeuralNetwork(self.actor_nn_config, self.environment, input_s, output_s)
 
-    def print_progress(self,
-                       n,
-                       episodes,
-                       res_list):
+    def print_progress(self, n, episodes, res_list):
         """
         Prints the progress in the terminal.
         """
@@ -114,11 +112,11 @@ class MonteCarloTreeSearchAgent:
 
         print(prints, end="\r")
 
-    def get_tree_search_action(self,
-                               current_state,
-                               mcts,
-                               ):
-        # do the montecarlo tree rollout
+    def get_tree_search_action(self, current_state, mcts):
+        """
+        Searches for the best action to pick.
+        """
+        # do the Monte Carlo tree rollout
         mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(root_state=current_state)
 
         # convert the vec to target dist
@@ -129,13 +127,9 @@ class MonteCarloTreeSearchAgent:
 
         return self.environment.get_action_space()[target_idx]
 
-    def _take_game_move(self,
-                        current_state,
-                        mcts,
-                        replay_buffer,
-                        critic_train_set):
+    def _take_game_move(self, current_state, mcts, replay_buffer, critic_train_set):
 
-        # do the montecarlo tree rollout
+        # do the Monte Carlo tree rollout
         mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(root_state=current_state)
 
         # convert the vec to target dist

@@ -32,10 +32,15 @@ class EGreedy:
         self.epsilon = max(self.epsilon - self._epsilon_decay, self._epsilon_lb)
 
     def reset(self):
+        """
+        Resets the epsilon to the initial epsilon value.
+        """
         self.epsilon = self._init_epsilon
 
-    def should_pick_greedy(self,
-                           increment_round=False):
+    def should_pick_greedy(self, increment_round=False):
+        """
+        If the model should pick greedy or not.
+        """
         ret = False
         if random.random() > self.epsilon:
             ret = True
@@ -45,9 +50,10 @@ class EGreedy:
         return ret
 
 
-def generate_batch(x,
-                   y,
-                   batch_size):
+def generate_batch(x, y, batch_size):
+    """
+    Todo - Remove? Not used
+    """
     batch_x = []
     batch_y = []
     while len(batch_x) < batch_size:
@@ -57,9 +63,10 @@ def generate_batch(x,
     return batch_x, batch_y
 
 
-def get_action_visit_map_as_target_vec(environment,
-                                       action_visit_map: {},
-                                       invert=False):
+def get_action_visit_map_as_target_vec(environment, action_visit_map: {}, invert=False):
+    """
+    Convert the vec to target distance.
+    """
     possible_actions = environment.get_action_space()
     visit_sum = sum(action_visit_map.values())
 
