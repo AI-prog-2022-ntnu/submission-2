@@ -9,6 +9,11 @@ The basis for an environment for the rl agent to act in
 
 class BaseEnvironment:
 
+    @abstractmethod
+    def get_winning_player_id(self,
+                              state):
+        pass
+
     #
     #   env interaction
     #
@@ -19,6 +24,7 @@ class BaseEnvironment:
             action,
             inplace=False) -> (BaseState, int, bool):
         """
+        :param search_for_next_terminal:
         :param state: current state
         :param action: the action to take
         :param inplace: whether to change the state inplace or copy it. defaults to false
@@ -111,12 +117,12 @@ class BoardGameEnvironment(BaseEnvironment):
 
     @abstractmethod
     def get_state_winning_move(self,
-                               state: BoardGameBaseState):
+                               state: BoardGameBaseState) -> (bool, object):
         """
         in some senarios one can quickly calculate if any of the next moves are a winning one. if this is possible
         and sutch a move exist it will be returned, if not None is returned
         :param state:
-        :return:
+        :return: if the current state is won, the move that wil winn if any exist
         """
         pass
 

@@ -31,8 +31,10 @@ class Critic:
         self.nn_config = nn_config
 
         self.loss_hist = []
-        self.train_buffer = []
         self.latest_set_loss_list = []
+
+        self.train_buffer: [([int], [float])] = []
+        self.max_buffer_size = 1000
 
         self.model = CriticNeuralNet(
             nn_config=self.nn_config,
@@ -40,9 +42,18 @@ class Critic:
             input_size=self.input_size,
         )
 
+    def _expand_replay_buffer(self,
+                              buffer):
+        self.train_buffer = [*self.train_buffer, *buffer]
+        new_b_len = len(self.train_buffer)
+
+        if new_b_len > self.max_buffer_size:
+            self.train_buffer = self.train_buffer[(new_b_len - self.max_buffer_size):]
+
     def train_from_buffer(self,
                           buffer):
-        loss = self.model.train_from_buffer(buffer)
+        self._expand_replay_buffer(buffer)
+        loss = self.model.train_from_buffer(self.train_buffer)
 
         # self.loss_hist.append(np.mean(loss))
         self.loss_hist.extend(loss)
@@ -61,5 +72,5 @@ class Critic:
                          state_list):
         x = [s.get_as_vec() for s in state_list]
         # x = [s.get_as_vec() if s.current_player_turn() == 0 else s.get_as_inverted_vec() for s in state_list]
-        state_val = self.model.forward(torch.tensor(x, dtype=torch.float))[0].tolist()
+        state_val = self.model.forward(torch.tensor(x, dtype=torch.float)).tolist()
         return state_val
