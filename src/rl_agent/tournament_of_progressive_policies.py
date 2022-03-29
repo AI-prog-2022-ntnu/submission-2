@@ -18,6 +18,9 @@ from rl_agent.util import NeuralNetworkConfig, EGreedy
 
 
 class TOPP:
+    """
+    TODO: comment
+    """
 
     def __init__(self,
                  total_itrs,
@@ -70,19 +73,6 @@ class TOPP:
             idx = random.choices(range(len(action_space)), weights=prob_dist)[0]
 
             action = action_space[idx]
-            # print(prob_dist)
-            # print(action_space)
-            # print(action)
-
-            # target_val = max(prob_dist)
-            # action_idx = prob_dist.index(target_val)
-            # action = self.environment.get_action_space()[action_idx]
-
-            # if state.current_player_turn() == 0:
-            #     action = self.environment.get_action_space_list()[action_idx]
-            # else:
-            #     action_inv = self.environment.get_action_space_list()[action_idx]
-            #     action = (action_inv[1], action_inv[0])
 
         return action
 
@@ -96,8 +86,10 @@ class TOPP:
 
         p1_score = 0
         p2_score = 0
-        model_1 = BoardGameActorNeuralNetwork.load_model(self._model_save_path(pl1), self.actor_nn_config, self.environment, input_s, output_s)
-        model_2 = BoardGameActorNeuralNetwork.load_model(self._model_save_path(pl2), self.actor_nn_config, self.environment, input_s, output_s)
+        model_1 = BoardGameActorNeuralNetwork.load_model(self._model_save_path(pl1), self.actor_nn_config,
+                                                         self.environment, input_s, output_s)
+        model_2 = BoardGameActorNeuralNetwork.load_model(self._model_save_path(pl2), self.actor_nn_config,
+                                                         self.environment, input_s, output_s)
         # print(f"iter {pl1} vs {pl2}")
 
         for n in range(self.num_games_in_matches):
@@ -136,12 +128,14 @@ class TOPP:
             frac_p1 = (p1_score + 1) / (p2_score + p1_score + 2)
             p1_bar = math.floor(frac_p1 * 100) * "|"
             p2_bar = math.floor((1 - frac_p1) * 100) * "|"
-            print("iter: \u001b[32m{:<5}\u001b[0m -{:->4}-> \u001b[32m{}\u001b[31m{}\u001b[0m <-{:-<4}-iter: \u001b[31m{:>5}\u001b[0m".format(pl1,
-                                                                                                                                              p1_score,
-                                                                                                                                              p1_bar,
-                                                                                                                                              p2_bar,
-                                                                                                                                              p2_score,
-                                                                                                                                              pl2) + " " * 20, end="\r")
+            print(
+                "iter: \u001b[32m{:<5}\u001b[0m -{:->4}-> \u001b[32m{}\u001b[31m{}\u001b[0m <-{:-<4}-iter: \u001b[31m{:>5}\u001b[0m".format(
+                    pl1,
+                    p1_score,
+                    p1_bar,
+                    p2_bar,
+                    p2_score,
+                    pl2) + " " * 20, end="\r")
         print()
 
     def get_top_model_list(self):
@@ -150,7 +144,8 @@ class TOPP:
         output_s = self.environment.get_action_space_size()
         used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
 
-        return [BoardGameActorNeuralNetwork.load_model(self._model_save_path(save_p), self.actor_nn_config, self.environment, input_s, output_s) for save_p in used_save_p]
+        return [BoardGameActorNeuralNetwork.load_model(self._model_save_path(save_p), self.actor_nn_config,
+                                                       self.environment, input_s, output_s) for save_p in used_save_p]
 
     def training_torney(self,
                         actor_model: BoardGameActorNeuralNetwork,
@@ -281,7 +276,8 @@ class TOPP:
 
         for value, key in best:
             wins, losses = leader_board[key]
-            print("iteration {:<5} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins, losses))
+            print("iteration {:<5} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins,
+                                                                                                          losses))
 
     def run_tournaments(self, ):
         used_save_p = [sp for sp in self._save_points if os.path.exists(self._model_save_path(sp))]
@@ -298,4 +294,5 @@ class TOPP:
 
         for value, key in best:
             wins, losses = leader_board[key]
-            print("iteration {:<5} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins, losses))
+            print("iteration {:<5} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(key, wins,
+                                                                                                          losses))

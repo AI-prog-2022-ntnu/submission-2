@@ -1,25 +1,19 @@
-import itertools
 import math
 import random
-import os
+from os import path
 
-import numpy as np
 import pandas
 import torch
-from torch import nn
 
-from abc import abstractmethod
-from os import path
-from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
-
+from enviorments.base_environment import BoardGameEnvironment
+from enviorments.base_state import BoardGameBaseState
 # TODO: generalize
 # TODO: have not checked that this actually works at all
 from rl_agent.agent_net import BoardGameActorNeuralNetwork
 from rl_agent.critic import Critic, CriticNeuralNet
 from rl_agent.mc_tree_search import MontecarloTreeSearch
 from rl_agent.tournament_of_progressive_policies import TOPP
-from rl_agent.util import generate_batch, get_action_visit_map_as_target_vec, NeuralNetworkConfig
+from rl_agent.util import get_action_visit_map_as_target_vec, NeuralNetworkConfig
 
 
 class MonteCarloTreeSearchAgent:
@@ -65,13 +59,18 @@ class MonteCarloTreeSearchAgent:
 
     def load_model_from_fp(self,
                            fp):
+        """
+        Loads the pre-trained model from the path "fp".
+        """
         if fp is not None and path.exists(fp):
             output_size = self.environment.get_action_space_size()
-            model = BoardGameActorNeuralNetwork.load_model(fp, self.actor_nn_config, self.environment, self.nn_input_size, output_size)
+            model = BoardGameActorNeuralNetwork.load_model(fp, self.actor_nn_config, self.environment,
+                                                           self.nn_input_size, output_size)
             self.model = model
 
             critic_fp = fp + "_critic"
-            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment, self.nn_input_size)
+            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment,
+                                                      self.nn_input_size)
             self.critic.model = critic_model
 
             self.model.share_memory()
@@ -83,13 +82,18 @@ class MonteCarloTreeSearchAgent:
 
     def save_actor_critic_to_fp(self,
                                 fp):
+        """
+        Saves the actor critic.
+        """
         if fp is not None:
             critic_fp = fp + "_critic"
             self.model.save_model(fp)
             self.critic.model.save_model(critic_fp)
 
     def _build_network(self):
-
+        """
+        Creates the board game neural network model.
+        """
         input_s = self.environment.get_observation_space_size()
         output_s = self.environment.get_action_space_size()
         b_size = math.floor(math.sqrt(input_s))
@@ -97,6 +101,9 @@ class MonteCarloTreeSearchAgent:
 
     def _expand_replay_buffer(self,
                               buffer):
+        """
+        Expands the replay buffer list.
+        """
         self.train_buffer = [*self.train_buffer, *buffer]
         new_b_len = len(self.train_buffer)
 
@@ -129,6 +136,9 @@ class MonteCarloTreeSearchAgent:
                                current_state,
                                mcts,
                                ):
+        """
+        Does the Monte Carlo tree rollout and picks the action to do.
+        """
         # do the montecarlo tree rollout
         mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(root_state=current_state)
 
@@ -151,6 +161,7 @@ class MonteCarloTreeSearchAgent:
 
         # convert the vec to target dist
         all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
+        print(f'Target distance: {all_action_dist}')
 
         # put the target dist in the replay buffer
         replay_buffer.append((current_state, mc_visit_counts_map))
@@ -165,12 +176,7 @@ class MonteCarloTreeSearchAgent:
             self.environment.display_state(next_s)
 
         if critic_train_map is not None:
-            # x, y = [], []
             for state, val in critic_train_map.items():
-                # print(val)
-                # x.append(vec)
-                # y.append(val)
-                # if vec.current_player_turn() == 0:
                 critic_train_set.append((state, val))
 
         return next_s, r, game_done
@@ -180,6 +186,9 @@ class MonteCarloTreeSearchAgent:
                     flip_start=False,
                     train_critic=False,
                     ):
+        """
+        Runs an episode of the game.
+        """
         game_done = False
         replay_buffer = []
         critic_train_set = []
@@ -216,6 +225,10 @@ class MonteCarloTreeSearchAgent:
 
     def human_move(self,
                    current_state):
+        """
+        Waits for an input from the human player and checks if it is valid or not.
+        The input should be two numbers for example: 5 5 .
+        """
         valid_move = False
         valid_actions = self.environment.get_valid_actions(current_state)
         while not valid_move:
@@ -241,6 +254,9 @@ class MonteCarloTreeSearchAgent:
         return next_s, r, game_done
 
     def play_against_human(self):
+        """
+        Plays a game against a human player in the terminal.
+        """
         self.run_episode(
             player_2=self.human_move,
             train_critic=False,
@@ -250,6 +266,9 @@ class MonteCarloTreeSearchAgent:
     def run_topp(self,
                  n,
                  num_games):
+        """
+        Runs the Tournament of Progressive Policies.
+        """
         topp = TOPP(
             total_itrs=n,
             actor_nn_config=self.actor_nn_config,
@@ -264,6 +283,9 @@ class MonteCarloTreeSearchAgent:
                           topp_saves,
                           lr: float,
                           discount: float):
+        """
+        Trains the model.
+        """
         topp = TOPP(
             total_itrs=num_games,
             actor_nn_config=self.actor_nn_config,
@@ -283,6 +305,9 @@ class MonteCarloTreeSearchAgent:
                          n,
                          fp=None,
                          games_in_topp_matches=500):
+        """
+        Trains a number of episodes.
+        """
 
         topp = TOPP(
             total_itrs=n,

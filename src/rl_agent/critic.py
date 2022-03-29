@@ -1,18 +1,18 @@
-import math
 import random
 
-import numpy as np
 import torch
-from torch import nn
 
 from enviorments.base_environment import BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
+from enviorments.base_state import BoardGameBaseState
 from rl_agent.critic_net import CriticNeuralNet
 from rl_agent.util import NeuralNetworkConfig
 
 
 def generate_batch(data_list,
                    batch_size):
+    """
+    TODO: remove? never used
+    """
     batch = []
     while len(batch) < batch_size:
         batch.append(random.choice(data_list))
@@ -44,6 +44,9 @@ class Critic:
 
     def _expand_replay_buffer(self,
                               buffer):
+        """
+        Expands the replay buffer list
+        """
         self.train_buffer = [*self.train_buffer, *buffer]
         new_b_len = len(self.train_buffer)
 
@@ -52,6 +55,9 @@ class Critic:
 
     def train_from_buffer(self,
                           buffer):
+        """
+        Trains the model from the buffer.
+        """
         self._expand_replay_buffer(buffer)
         loss = self.model.train_from_buffer(self.train_buffer)
 
@@ -60,6 +66,9 @@ class Critic:
 
     def get_state_value(self,
                         state: BoardGameBaseState):
+        """
+        Returns the state value.
+        """
         # if state.current_player_turn() == 0:
         state_vec = state.get_as_vec()
         # else:
@@ -71,6 +80,9 @@ class Critic:
     def get_states_value(self,
                          state_list):
         x = [s.get_as_vec() for s in state_list]
+        """
+        Returns the values of the states.
+        """
         # x = [s.get_as_vec() if s.current_player_turn() == 0 else s.get_as_inverted_vec() for s in state_list]
         state_val = self.model.forward(torch.tensor(x, dtype=torch.float)).tolist()
         return state_val
