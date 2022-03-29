@@ -181,6 +181,7 @@ class TOPP:
         topp_model_list = self.get_top_model_list()
         topp_model_list.append(actor_model)
         model_weights = [1 for _ in range(len(topp_model_list))]
+        train_buffer = []
         for n in range(num_games):
             game_done = False
             game_state: BoardGameBaseState = self.environment.get_initial_state()
@@ -200,7 +201,10 @@ class TOPP:
             p2_idx = topp_model_list.index(p2_model)
             e_greedy.reset()
             while not game_done:
-                if game_state.current_player_turn() == 0:
+                winning_move = self.environment.get_state_winning_move(game_state)
+                if winning_move is not None:
+                    action = winning_move
+                elif game_state.current_player_turn() == 0:
                     action = self._tornament_model_pick_action(game_state, actor_model)
                 else:
                     if rand_game:
@@ -216,8 +220,14 @@ class TOPP:
                     match_log.append(copy.deepcopy(game_state))
                 if game_done:
                     result = r
+
+            train_buffer = [*train_buffer, *match_log]
+            new_b_len = len(train_buffer)
+
+            if new_b_len > 1000:
+                train_buffer = train_buffer[(new_b_len - 1000):]
             actor_model.train_from_battle(
-                state_list=match_log,
+                state_list=train_buffer,
                 end_result=result,
                 lr=lr,
                 discount=discount

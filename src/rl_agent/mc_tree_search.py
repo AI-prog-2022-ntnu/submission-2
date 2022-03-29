@@ -73,6 +73,7 @@ def _parallel_mc_rollout(
 
     winning_move = environment.get_state_winning_move(state)
 
+    # environment.display_state(state)
     if winning_move is not None:
         action = winning_move
     elif e_greedy.should_pick_greedy(increment_round=True):
@@ -115,6 +116,8 @@ def parallel_rollout(agent,
         except Exception as e:
             print("THREAD TIMEOUT")
             break
+        if msg == -1:
+            break  # it's fucking horrible but normal python practice
         current_fork_num = 0
         if msg is not None:
             org_root_state, org_value_prop, use_critic_prob = msg
@@ -246,7 +249,8 @@ class MontecarloTreeSearch:
             except queue.Empty as e:
                 try_fetch = False
 
-        print(f"burned {num_burned} que tasks")
+        if self.debug:
+            print(f"burned {num_burned} que tasks")
 
     def _concurrency_tickler(self):
         try_fetch = True
@@ -485,13 +489,20 @@ class MontecarloTreeSearch:
     ################################
 
     def close_helper_threads(self):
-        for _ in range(self.worker_thread_count * 2):
-            self.to_workers_message_que.put(None)
+        for _ in range(self.worker_thread_count * 10):
+            self.to_workers_message_que.put(-1)
 
-        for p in self.mp_processes:
-            p.join()
         if self.clean_thread is not None:
             self.clean_thread.join()
+
+        self.from_worker_message_que.close()
+        self.from_worker_message_que.join_thread()
+        self.to_workers_message_que.close()
+        self.to_workers_message_que.join_thread()
+        for p in self.mp_processes:
+            # p.kill()
+            # p.join(timeout=0.01)
+            p.kill()
 
     def searh_loop(self,
                    stop_t,
@@ -508,17 +519,16 @@ class MontecarloTreeSearch:
 
                 self._tree_search(parent=root_s_node, value_prop=value_prop, stop_t=stop_t)
 
-        self.done_flag.value = True
-        if not self.is_training:
-            time.sleep(0.2)
-        else:
-            while self.active_p_semaphore > 0:
-                self._concurrency_tickler()
+        # if not self.is_training:
+        #     time.sleep(0.2)
+        # else:
+        while self.active_p_semaphore > 0:
+            # print(self.active_p_semaphore)
+            self._concurrency_tickler()
         # time.sleep(0.1)
-        print(f"start_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
+        # print(f"start_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
         self._clear_worker_que()
-        self.done_flag.value = False
-        print(f"end_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
+        # print(f"end_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
 
     def mc_tree_search(self,
                        root_state: BoardGameBaseState):
@@ -536,13 +546,14 @@ class MontecarloTreeSearch:
 
         if self.clean_thread is not None:
             self.clean_thread.join()
+            self.clean_thread = None
 
-        print(f"clean thread start at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
+        # print(f"clean thread start at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
 
         root_s_node: MonteCarloTreeSearchNode = self.search_node_map.get(hash(root_state))
         root_node = self._get_node_by_hash(hash(root_state))
 
-        print(f"fetch root at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
+        # print(f"fetch root at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
 
         self.critic_eval_frac = 0.0  # self._calculate_critic_eval_frac()
         # print(f"Using a critic eval frac of {self.critic_eval_frac * 100}%")
@@ -564,26 +575,48 @@ class MontecarloTreeSearch:
         if not root_s_node.has_been_expanded:
             self._expand_node(root_s_node)
 
-        if root_s_node.has_terminal_child:
-            print("\n\n\n\n")
+        # if root_s_node.has_terminal_child:
+        #     print("\n\n\n\n")
+
+        # winning_m = self.environment.get_state_winning_move(root_s_node.state)
+        # if winning_m is not None:
+        #     ret = {}
+        #     # print("\n\n\nHAS WINNING MOVE")
+        #     for c in root_s_node.children:
+        #         c: MonteCarloTreeSearchNode = c
+        #         # c.state.change_turn()
+        #         # done = self.environment.is_state_won(c.state)  # no fucking clue why this does not work like everything else. the same shitty method is called elswher and works
+        #         if c.terminal:
+        #             ret[c.action_from_parent] = 1
+        #         else:
+        #             ret[c.action_from_parent] = 0
+        #     return ret, {}
 
         winning_m = self.environment.get_state_winning_move(root_s_node.state)
         if winning_m is not None:
+            # print("\n" * 20)
+            valid_actons = self.environment.get_valid_actions(root_s_node.state)
             ret = {}
-            print("\n\n\nHAS WINNING MOVE")
-            for c in root_s_node.children:
-                c: MonteCarloTreeSearchNode = c
-                if c.terminal:
-                    ret[c.action_from_parent] = 1
+            # print("\n\n\nHAS WINNING MOVE")
+            # self.environment.display_state(root_state)
+            for act in valid_actons:
+
+                # this is a shit show
+                s2, r, d = self.environment.act(state=root_state, action=act, inplace=False)
+                if self.environment.get_winning_player_id(s2) is not None:
+                    # self.environment.display_state(s2)
+                    ret[act] = 1
                 else:
-                    ret[c.action_from_parent] = 0
+                    ret[act] = 0
+            # print(ret)
             return ret, {}
 
         root_s_node.state.change_turn()
         losing_m = self.environment.get_state_winning_move(root_s_node.state)
+        root_s_node.state.change_turn()
         if losing_m is not None:
             ret = {losing_m: 1}
-            print("\n\n\nFound losing move MOVE")
+            # print("\n\n\nFound losing move MOVE")
             for c in root_s_node.children:
                 c: MonteCarloTreeSearchNode = c
                 if ret.get(c.action_from_parent) is None:
@@ -591,20 +624,20 @@ class MontecarloTreeSearch:
 
             return ret, {}
 
-        root_s_node.state.change_turn()
-        print(f"calc stop_t at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
+        # print(f"calc stop_t at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
 
         # for i in range(num_rollouts):
 
-        is_training = True
+        # is_training = True
         self.rnds = 0
-        self.clean_thread = Thread(target=self.searh_loop, args=(stop_t, root_s_node, is_training))
-        self.clean_thread.start()
-        wait_t_ajusted = ((stop_t - time.monotonic_ns()) / 1000000)
+        # self.clean_thread = Thread(target=self.searh_loop, args=(stop_t, root_s_node, is_training))
+        # self.clean_thread.start()
+        # wait_t_ajusted = ((stop_t - time.monotonic_ns()) / 1000000)
 
-        print(f"wait t -: {(wait_t_ajusted)}ms,  f conf ms{self.agent.ms_tree_search_time}")
+        self.searh_loop(stop_t, root_s_node, True)
+        # print(f"wait t -: {(wait_t_ajusted)}ms,  f conf ms{self.agent.ms_tree_search_time}")
 
-        time.sleep(max(0, wait_t_ajusted) / 1000)
+        # time.sleep(max(0, wait_t_ajusted) / 1000)
 
         ret = {}  # ehhhh
         ret_2_electric_bogaloo = {}  # ehhhh
@@ -612,7 +645,7 @@ class MontecarloTreeSearch:
         max_v, max_a = 0, None
         v_sum = 0
 
-        print(f"start agr at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
+        # print(f"start agr at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
         for child in root_s_node.children:
             child_s_node: MonteCarloTreeSearchNode = child
             node = self._get_node_by_hash(child_s_node.node_hash)
@@ -632,10 +665,10 @@ class MontecarloTreeSearch:
 
         ret_2_electric_bogaloo[root_s_node.state] = root_node.discounted_value / root_node.visits
 
-        print(f"end agr at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
-        print(f"completed {self.rnds} rollouts in the {wait_milli_sec}ms limit")
+        # print(f"end agr at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
 
         if self.debug:
+            print(f"completed {self.rnds} rollouts in the {wait_milli_sec}ms limit")
             p_dists = self.agent.model.get_probability_distribution([root_s_node.state])[0]
 
             state_vals = self.agent.critic.get_states_value([c.state for c in root_s_node.children])
@@ -670,8 +703,8 @@ class MontecarloTreeSearch:
             print(f"v count sum: {v_count_sum}")
             # print(self.node_map)
 
-        end_time = time.monotonic_ns()
-        print(f"mc tree search RTT: {math.floor((end_time - start_time) / 1000000)}ms")
+            end_time = time.monotonic_ns()
+            print(f"mc tree search RTT: {math.floor((end_time - start_time) / 1000000)}ms")
         return ret, ret_2_electric_bogaloo
 
 

@@ -122,7 +122,7 @@ class OHTClient(ActorClient):
 
         print()
         print("NEW MOVE:")
-        start_t = time.monotonic_ns()
+        # start_t = time.monotonic_ns()
         player = state[0] % 2
         used_state = self.env.get_initial_state()
         used_state.players_turn = player
@@ -131,20 +131,26 @@ class OHTClient(ActorClient):
         # print("post", s_vec.get_as_vec())
 
         self.env.display_state(used_state, display_internal=False)
-        action = self.agent.get_tree_search_action(used_state, self.mcts)
+        prob_dist = self.agent.model.get_probability_distribution([used_state])[0]
+
+        target_val = max(prob_dist)
+        action_idx = prob_dist.index(target_val)
+        action = self.env.get_action_space()[action_idx]
+
+        # action = self.agent.get_tree_search_action(used_state, self.mcts)
         print(action)
         y_shift = self.env.internal_board_size - self.env.board_size
         x = action[0]
         y = action[1] - y_shift
 
-        end_t = time.monotonic_ns()
-        move_rtt = math.floor((end_t - start_t) / 1000000)
-
-        print(f"Move RTT: {move_rtt}")
-
-        print("CRASH ON OVERTIME ACTIVE")
-        if move_rtt > 1000:
-            raise Exception("OVER_TIME")
+        # end_t = time.monotonic_ns()
+        # move_rtt = math.floor((end_t - start_t) / 1000000)
+        #
+        # print(f"Move RTT: {move_rtt}")
+        #
+        # print("CRASH ON OVERTIME ACTIVE")
+        # if move_rtt > 1000:
+        #     raise Exception("OVER_TIME")
         return y, x
 
     def handle_game_over(self,
@@ -165,18 +171,19 @@ class OHTClient(ActorClient):
         print("game {:>3} of {:>3} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(self.current_game_num, self.tot_games, self.p_1_wins, self.p_2_wins))
         print("\n")
 
-        self.mcts.close_helper_threads()
-        self.mcts = MontecarloTreeSearch(
-            is_training=False,
-            exploration_c=self.agent.exploration_c,
-            environment=self.agent.environment,
-            agent=self.agent,
-            worker_thread_count=self.agent.worker_thread_count,
-            worker_fork_number=self.agent.worker_fork_number
-        )
+        # self.mcts.close_helper_threads()
+        # self.mcts = MontecarloTreeSearch(
+        #     is_training=False,
+        #     exploration_c=self.agent.exploration_c,
+        #     environment=self.agent.environment,
+        #     agent=self.agent,
+        #     worker_thread_count=self.agent.worker_thread_count,
+        #     worker_fork_number=self.agent.worker_fork_number
+        # )
 
 
 if __name__ == '__main__':
-    client = OHTClient(qualify=False, auth="b9e9a8d2199e48c7857967457401b14a")
+    # client = OHTClient(qualify=False, auth="b9e9a8d2199e48c7857967457401b14a")
+    client = OHTClient(qualify=False, auth="9ce610bf4cbd4e20a79fdbbe51295981")
     # client = OHTClient()
     client.run()

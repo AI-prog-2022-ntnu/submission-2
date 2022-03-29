@@ -204,6 +204,13 @@ class MonteCarloTreeSearchAgent:
                 current_state, r, game_done = self._take_game_move(current_state, mcts, replay_buffer, critic_train_set)
             else:
                 current_state, r, game_done = player_2(current_state)
+            actual_has_won = self.environment.get_winning_player_id(current_state)
+            if actual_has_won is not None:
+                if actual_has_won == 0:
+                    r = 1
+                else:
+                    r = -1
+                game_done = True
 
         mcts.close_helper_threads()
         if train_critic:

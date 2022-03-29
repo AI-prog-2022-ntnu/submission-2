@@ -24,14 +24,14 @@ def main():
 
     env = HexGameEnvironment(
         board_size=7,
-        internal_board_size=10
+        internal_board_size=7
     )
 
     actor_nn_config = NeuralNetworkConfig(
         episode_train_time_ms=1000,
         train_iterations=0,
         data_passes=10,
-        batch_size=10,
+        batch_size=5,
         lr=None,
     )
 
@@ -39,18 +39,18 @@ def main():
         episode_train_time_ms=1000,
         train_iterations=0,
         data_passes=10,
-        batch_size=10,
+        batch_size=5,
         lr=None,
     )
 
     agent = MonteCarloTreeSearchAgent(
-        ms_tree_search_time=2000,
-        topp_saves=10,
+        ms_tree_search_time=1500,
+        topp_saves=100,
         environment=env,
         # exploration_c=math.sqrt(2),
         exploration_c=1,
-        worker_thread_count=11,
-        worker_fork_number=9,
+        worker_thread_count=43,
+        worker_fork_number=6,
         actor_nn_config=actor_nn_config,
         critic_nn_config=critic_nn_config,
     )
@@ -63,10 +63,18 @@ def main():
     #     worker_fork_number=agent.worker_fork_number
     # )
     # init = env.get_initial_state()
-    # init._board_vec = [1, 1, 1, -1, 0, -1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, -1, 1, 1, 1, -1, 0, -1, 1, -1, 0, -1, 1, 1, 1, 0, -1, 1, 0, 0, 1, -1, 1, 1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 1, 1, 0, 1,
-    #                    0, -1, 0, -1, 0, 1, 1, 1, 0, 1, 0, 0, 1, -1, 0, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+    # # # init._board_vec = [0, 1, -1, -1, 1, 0, 0, 1, 0, -1, -1, 1, 0, 0, 1, 0, -1, -1, -1, 0, 0, -1, 1, 0, -1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, -1, 1, 1, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0]
+    # # init._board_vec = [1, 1, 1, 0, -1, -1, 1, 1, 1, -1, 1, 1, 1, 0, 1, 0, 0, -1, 0, -1, 1, 1, 1, 1, -1, 1, 0, 0, -1, 1, 1, 1, 1, -1, 1, 0, 0, 0, -1, -1, 1, 1, 1, 0, 1, 0, 0, 1, 0, -1, 1, 1, 1, -1, 1,
+    # #                    1, 0, 0, 0, -1, 1,
+    # #                    1, 1, -1, 1, 1, 0, 0, 0, -1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+    # init._board_vec = [1, 1, 1, 0, 0, 0, 0, -1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, -1, 1, 1, 1, 1, 0, 0, -1, -1, 1, 1, 0, 1, 1, 1, 0, -1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, -1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+    #                    0, 0, 0, 1, 1, 1, 0, -1, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
     # env.display_state(init)
-    # agent.get_tree_search_action(init, mcts)
+    # ns, r, done = env.act(state=init, action=(3, 6), inplace=True)
+    # print(ns, r, done)
+    # env.display_state(init)
+    # # init.change_turn()
+    # # print(env.get_state_winning_move(state=init))
     # exit()
 
     # model_fp = "self_play/test_1"
@@ -81,19 +89,19 @@ def main():
     # agent.run_self_training(
     #     num_games=10000,
     #     discount=0.9,
-    #     lr=2,
+    #     lr=1,
     #     topp_saves=10,
     # )
+
+    # agent.display = True
+    # agent.debug = True
     #
-    agent.display = True
-    agent.debug = True
-    #
-    agent.play_against_human()
-    # agent.train_n_episodes(
-    #     n=200,
-    #     fp=model_fp,
-    #     games_in_topp_matches=100
-    # )
+    # agent.play_against_human()
+    agent.train_n_episodes(
+        n=10000,
+        fp=model_fp,
+        games_in_topp_matches=200
+    )
     # agent.run_topp(100, num_games=500)
     exit()
 

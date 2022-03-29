@@ -2,7 +2,7 @@ import plotly.express as px
 import pandas as pd
 
 mdl = "10x10_vers_1"
-smothing = 500
+smothing = 10
 
 df = pd.read_csv(f"saved_models/model_{mdl}_actor_loss.csv")
 

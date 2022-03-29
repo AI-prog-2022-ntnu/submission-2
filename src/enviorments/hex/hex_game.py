@@ -39,7 +39,9 @@ class HexBoardGameState(BoardGameBaseState):
     board_size = 10
 
     def __init__(self,
-                 board):
+                 board,
+                 board_padding=3):
+        self.board_padding = board_padding
         self._board_vec = []
         self.board_hash = None
         self.players_turn = 0
@@ -216,73 +218,10 @@ def _get_connected_cells(x: int,
     # print()
     for test in tests:
         # print(test)
-        if test[0] < state.board_size_x and test[0] >= 0 and test[1] < state.board_size_x and test[1] >= 0:
+        if test[0] < state.board_size_x - state.board_padding and test[0] >= 0 and test[1] < state.board_size_x and test[1] >= state.board_padding:
             valid.append(test)
 
     return valid
-
-
-# def _win_traverse(board: [[int]],
-#                   checked: [(int, int)],
-#                   current_node: (int, int),
-#                   term_nodes: [(int, int)]):
-#     x, y = current_node[0], current_node[1]
-#     checked.append(current_node)
-#     cur_node_v = board[x][y]
-#     connected = _get_connected_cells(x, y, board)
-#     suc = False
-#
-#     # print("cheked", checked)
-#     # print("con", connected)
-#     # print("node ", current_node)
-#     for node in connected:
-#         # print("node v ", board[node[0]][node[1]])
-#         # print(cur_node_v)
-#         # print("chke", checked)
-#         # print(board[node[0]][node[1]] == cur_node_v)
-#         if node not in checked and board[node[0]][node[1]] == cur_node_v:
-#             # print("traversing ", node)
-#             # print("traversing ",board[node[0]][node[1]])
-#             if node in term_nodes:
-#                 suc = True
-#             else:
-#                 suc = _win_traverse(board, checked, node, term_nodes)
-#         if suc:
-#             break
-#     return suc
-
-
-# def _is_game_won(state: HexBoardGameState,
-#                  team_0: bool):
-#     checked = []
-#     board = state.hex_board
-#
-#     b_size = len(board)
-#
-#     win = False
-#
-#     if team_0:
-#         node_v = 1  # TODO: is BAD, fix
-#         term_nodes = [(n, b_size - 1) for n in range(b_size)]
-#         start_nodes = [(n, 0) for n in range(b_size)]
-#     else:
-#         node_v = -1  # TODO: is BAD, fix
-#         term_nodes = [(b_size - 1, n) for n in range(b_size)]
-#         start_nodes = [(0, n) for n in range(b_size)]
-#
-#     # print(start_nodes)
-#     # print(term_nodes)
-#     # print(node_v)
-#
-#     for node in start_nodes:
-#         # print(node, board[node[0]][node[1]])
-#         if board[node[0]][node[1]] == node_v:
-#             # print(node)
-#             win = _win_traverse(board, checked, node, term_nodes)
-#
-#         if win:
-#             break
-#     return win
 
 
 def _win_traverse(state: HexBoardGameState,
@@ -326,16 +265,16 @@ def _is_game_won(state: HexBoardGameState,
 
     if team_0:
         node_v = 1  # TODO: is BAD, fix
-        for n in range(state.board_size_x):
+        for n in range(state.board_size_x - state.board_padding):
             term_nodes.add((n, state.board_size_x - 1))
-            checked.add((n, 0))
-        start_nodes = [(n, 0) for n in range(state.board_size_x)]
+            checked.add((n, 0 + state.board_padding))
+        start_nodes = [(n, 0 + state.board_padding) for n in range(state.board_size_x - state.board_padding)]
     else:
         node_v = -1  # TODO: is BAD, fix
-        for n in range(state.board_size_x):
-            term_nodes.add((state.board_size_x - 1, n))
-            checked.add((0, n))
-        start_nodes = [(0, n) for n in range(state.board_size_x)]
+        for n in range(state.board_size_x - state.board_padding):
+            term_nodes.add((state.board_size_x - state.board_padding - 1, n + state.board_padding))
+            checked.add((0, n + state.board_padding))
+        start_nodes = [(0, n + state.board_padding) for n in range(state.board_size_x - state.board_padding)]
 
     # print(start_nodes)
     # print(term_nodes)
@@ -358,27 +297,39 @@ def _find_winning_move(
         state: HexBoardGameState,
         checked: set,
         current_node: (int, int),
-        term_nodes: set):
+        term_nodes: set,
+        is_trying=None):
     x, y = current_node[0], current_node[1]
     checked.add(current_node)
     connected = _get_connected_cells(x, y, state)
     move = None
 
+    # print("current ", current_node)
+    # print(connected)
+    try_hops = []
     for node in connected:
         chek_node_value = state.get_board_val(node[0], node[1])
         if node not in checked:
             if chek_node_value == player_board_value:
                 if node in term_nodes:
-                    move = node
+                    # if is_trying is None:
+                    #     return (-1,-1)
+                    move = is_trying
                 else:
-                    move = _find_winning_move(player_board_value, state, checked, node, term_nodes)
-            elif chek_node_value == 0:
-                # discard the win prop if at using from move
-                move = _find_winning_move(player_board_value, state, checked, node, term_nodes)
+                    move = _find_winning_move(player_board_value, state, checked, node, term_nodes, is_trying=is_trying)
+            elif chek_node_value == 0 and is_trying is None:
+                # print("hop v")
+                try_hops.append(node)
 
             if move is not None:
-                break
-        return move
+                return move
+
+    for try_hop in reversed(try_hops):
+        move = _find_winning_move(player_board_value, state, checked, try_hop, term_nodes, is_trying=try_hop)
+
+        if move is not None:
+            return move
+    return move
 
 
 def find_winning_move(
@@ -391,20 +342,27 @@ def find_winning_move(
 
     if team_0:
         node_v = 1  # TODO: is BAD, fix
-        for n in range(state.board_size_x):
+        for n in range(state.board_size_x - state.board_padding):
             term_nodes.add((n, state.board_size_x - 1))
-            checked.add((n, 0))
-        start_nodes = [(n, 0) for n in range(state.board_size_x)]
+            checked.add((n, 0 + state.board_padding))
+        start_nodes = [(n, 0 + state.board_padding) for n in range(state.board_size_x - state.board_padding)]
     else:
         node_v = -1  # TODO: is BAD, fix
-        for n in range(state.board_size_x):
-            term_nodes.add((state.board_size_x - 1, n))
-            checked.add((0, n))
-        start_nodes = [(0, n) for n in range(state.board_size_x)]
+        for n in range(state.board_size_x - state.board_padding):
+            term_nodes.add((state.board_size_x - state.board_padding - 1, n + state.board_padding))
+            checked.add((0, n + state.board_padding))
+        start_nodes = [(0, n + state.board_padding) for n in range(state.board_size_x - state.board_padding)]
 
+    # print("is team 0", team_0)
+    # print("term", term_nodes)
+    # print("init", start_nodes)
     for node in start_nodes:
         if state.get_board_val(node[0], node[1]) == node_v:
             move = _find_winning_move(node_v, state, checked, node, term_nodes)
+
+        if move is not None:
+            return move
+            break
 
     return move
 
@@ -479,7 +437,7 @@ class HexGameEnvironment(BoardGameEnvironment):
 
     def get_state_winning_move(self,
                                state: BoardGameBaseState) -> (bool, (int, int)):
-        return find_winning_move(state, state.current_player_turn() != 0)
+        return find_winning_move(state, state.current_player_turn() == 0)
 
     def reverse_move(self,
                      state: HexBoardGameState,
@@ -497,7 +455,7 @@ class HexGameEnvironment(BoardGameEnvironment):
         if inplace:
             next_s = state
         else:
-            next_s = HexBoardGameState(None)
+            next_s = HexBoardGameState(None, board_padding=self.internal_board_size - self.board_size)
             next_s.board_size_x = state.board_size_x
             next_s._board_vec = state._board_vec[:]
             next_s.players_turn = state.players_turn
@@ -531,6 +489,16 @@ class HexGameEnvironment(BoardGameEnvironment):
             won = _is_game_won(next_s, team_0=True)
             if won:
                 reward = 1
+
+        # if _is_game_won(next_s, team_0=False):
+        #     reward = -1
+        #     won = True
+        # elif _is_game_won(next_s, team_0=True):
+        #     reward = 1
+        #     won = True
+        # else:
+        #     reward = 0
+        #     won = False
 
         return next_s, reward, won
 
@@ -579,7 +547,7 @@ class HexGameEnvironment(BoardGameEnvironment):
                         if any_red:
                             board[x][y] = -1
 
-        return HexBoardGameState(board)
+        return HexBoardGameState(board, board_padding=self.internal_board_size - self.board_size)
 
     def is_state_won(self,
                      state) -> bool:

@@ -180,6 +180,39 @@ class CriticNeuralNet(nn.Module):
                 stride=1,
             ),
 
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels=k,
                 out_channels=1,
@@ -190,7 +223,8 @@ class CriticNeuralNet(nn.Module):
             # nn.ELU(),
             nn.Flatten(),
             # nn.Dropout(),
-            nn.Linear((1 * 1 * 10 * 10), 1),
+            nn.Linear((1 * 1 * 7 * 7), 1),
+            # nn.Linear((1 * 1 * 10 * 10), 1),
             nn.Tanh(),
         )
         self.loss_fn = torch.nn.L1Loss()
@@ -271,7 +305,7 @@ class CriticNeuralNet(nn.Module):
             if stop_t is not None and not stop:
                 stop = time.monotonic_ns() > stop_t
 
-        print(f"CRITIC: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
+        # print(f"CRITIC: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
         self.train(False)
         return loss_values
 
