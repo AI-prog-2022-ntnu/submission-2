@@ -1,13 +1,11 @@
 import math
-import random
 import time
 
-import numpy as np
 import torch
 from torch import nn
 
 from enviorments.base_environment import BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
+from enviorments.base_state import BoardGameBaseState
 from rl_agent.util import NeuralNetworkConfig
 
 
@@ -25,215 +23,50 @@ class CriticNeuralNet(nn.Module):
         self.b_size = math.floor(math.sqrt(input_size))  # TODO: FIX IMPORTANT!
         self.nn_config = nn_config
 
-        # self.network = nn.Sequential(
-        #     nn.Conv2d(
-        #         in_channels=2,
-        #         out_channels=100,
-        #         kernel_size=(5, 5),
-        #         padding=1,
-        #         # stride=2
-        #     ),
-        #     nn.ReLU(),
-        #     nn.Conv2d(
-        #         in_channels=100,
-        #         out_channels=40,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.MaxPool2d(
-        #         kernel_size=(3, 3),
-        #         padding=1,
-        #         stride=1
-        #     ),
-        #     nn.ReLU(),
-        #     nn.Conv2d(
-        #         in_channels=40,
-        #         out_channels=20,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.ReLU(),
-        #     nn.Conv2d(
-        #         in_channels=20,
-        #         out_channels=20,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.Flatten(),
-        #     nn.ELU(),
-        #     nn.Linear((input_size) * 20, 1),
-        # )
-        # self.network = nn.Sequential(
-        #     nn.Conv2d(
-        #         in_channels=2,
-        #         out_channels=10,
-        #         kernel_size=(5, 5),
-        #         padding=0,
-        #         stride=1,
-        #     ),  # size: -1,3,8,8
-        #     nn.ELU(),
-        #     nn.Conv2d(
-        #         in_channels=10,
-        #         out_channels=15,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.ELU(),
-        #     nn.Conv2d(
-        #         in_channels=15,
-        #         out_channels=20,
-        #         kernel_size=(3, 3),
-        #         padding=1,
-        #         stride=1,
-        #     ),  # size: -1,40,8,8
-        #     nn.MaxPool2d(
-        #         kernel_size=(3, 3),
-        #         # padding=1,
-        #         stride=1
-        #     ),
-        #     nn.Conv2d(
-        #         in_channels=20,
-        #         out_channels=30,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.ELU(),
-        #     nn.Conv2d(
-        #         in_channels=30,
-        #         out_channels=35,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.ELU(),
-        #     nn.Conv2d(
-        #         in_channels=35,
-        #         out_channels=40,
-        #         kernel_size=(3, 3),
-        #         padding=1
-        #         # stride=2
-        #     ),
-        #     nn.MaxPool2d(
-        #         kernel_size=(3, 3),
-        #         padding=1,
-        #         stride=1
-        #     ),  # -1, 40, 2,2
-        #     nn.ELU(),
-        #     nn.Flatten(),
-        #     nn.Linear((4 * 4) * 40, 200),
-        #     nn.ELU(),
-        #     nn.Linear(200, 1),
-        # )
-
-        k = 20
-        self.network = nn.Sequential(
-            nn.Conv2d(
-                in_channels=2,
-                out_channels=k,
-                kernel_size=(5, 5),
-                padding=2,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=k,
-                kernel_size=(3, 3),
-                padding=1,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=k,
-                out_channels=1,
-                kernel_size=(1, 1),
-                padding=0,
-                stride=1,
-            ),
-            # nn.ELU(),
-            nn.Flatten(),
-            # nn.Dropout(),
-            nn.Linear((1 * 1 * 7 * 7), 1),
-            # nn.Linear((1 * 1 * 10 * 10), 1),
-            nn.Tanh(),
-        )
+        k = 20  # Todo: move?
+        self.network = self._get_conv_network(self.nn_config.nr_layers, k=k)
         self.loss_fn = torch.nn.L1Loss()
 
         # self.opt = torch.optim.Adam(self.parameters(), lr=0.00005)
         # self.opt = torch.optim.Adam(self.network.parameters())
 
-        self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0005)
+        self.opt = torch.optim.RMSprop(self.parameters(), self.nn_config.lr)
         # self.opt = torch.optim.SGD(self.parameters(), lr=0.001)
+
+    def _get_conv_network(self,
+                          nr_layers,
+                          k=20):
+        """
+        Creates the conv network model.
+        """
+        layers = [nn.Conv2d(in_channels=2, out_channels=k,
+                            kernel_size=(5, 5),
+                            padding=2,
+                            stride=1), nn.ReLU()]
+        # TODO: Prolly not the best way to loop
+        for n in range(nr_layers - 1):
+            layers.append(nn.Conv2d(
+                in_channels=k,
+                out_channels=k,
+                kernel_size=(3, 3),
+                padding=1,
+                stride=1,
+            ))
+            layers.append(nn.ReLU())
+        layers.append(nn.Conv2d(
+            in_channels=k,
+            out_channels=1,
+            kernel_size=(1, 1),
+            padding=0,
+            stride=1,
+        ))
+        layers.append(nn.Flatten())
+        layers.append(nn.Linear((1 * 1 * 7 * 7), 1))
+        layers.append(nn.Tanh())
+
+        network = nn.Sequential(*layers)
+
+        return network
 
     def forward(self,
                 x):

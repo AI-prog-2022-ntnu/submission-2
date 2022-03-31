@@ -20,7 +20,8 @@ def play_against_human(board_size=7, internal_board_size=7):
         train_iterations=0,
         data_passes=10,
         batch_size=10,
-        lr=None,
+        lr=0.002,
+        nr_layers=2
     )
 
     critic_nn_config = NeuralNetworkConfig(
@@ -28,7 +29,8 @@ def play_against_human(board_size=7, internal_board_size=7):
         train_iterations=0,
         data_passes=10,
         batch_size=10,
-        lr=None,
+        lr=0.0005,
+        nr_layers=10
     )
 
     agent = MonteCarloTreeSearchAgent(
@@ -63,16 +65,18 @@ def play_TOPP(board_size=7, internal_board_size=10):
         episode_train_time_ms=1000,
         train_iterations=0,
         data_passes=10,
-        batch_size=5,
-        lr=None,
+        batch_size=10,
+        lr=0.002,
+        nr_layers=2
     )
 
     critic_nn_config = NeuralNetworkConfig(
         episode_train_time_ms=1000,
         train_iterations=0,
         data_passes=10,
-        batch_size=5,
-        lr=None,
+        batch_size=10,
+        lr=0.0005,
+        nr_layers=10
     )
 
     agent = MonteCarloTreeSearchAgent(

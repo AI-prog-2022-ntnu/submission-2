@@ -8,7 +8,8 @@ class NeuralNetworkConfig:
                  batch_size,
                  lr,
                  data_passes=None,
-                 use_iter=True
+                 use_iter=True,
+                 nr_layers=None
                  ):
         self.data_passes = data_passes
         self.use_iter = use_iter
@@ -16,6 +17,7 @@ class NeuralNetworkConfig:
         self.lr = lr
         self.batch_size = batch_size
         self.episode_train_time_ms = episode_train_time_ms
+        self.nr_layers = nr_layers
 
 
 class EGreedy:
