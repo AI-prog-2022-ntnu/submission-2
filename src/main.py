@@ -9,7 +9,7 @@ from rl_agent.rl_agent import MonteCarloTreeSearchAgent
 from rl_agent.util import NeuralNetworkConfig
 
 
-def play_against_human(board_size=7, internal_board_size=10):
+def play_against_human(board_size=7, internal_board_size=7):
     env = HexGameEnvironment(
         board_size=board_size,
         internal_board_size=internal_board_size
@@ -112,8 +112,8 @@ def play_TOPP(board_size=7, internal_board_size=10):
 
 def main():
     torch.set_num_threads(1)
-    # play_against_human()
-    play_TOPP()
+    play_against_human()
+    # play_TOPP()
 
 
 if __name__ == '__main__':

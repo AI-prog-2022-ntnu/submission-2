@@ -3,7 +3,6 @@ import time
 
 import torch
 from torch import nn
-from torch.distributions import Categorical
 
 from enviorments.base_environment import BoardGameEnvironment
 from enviorments.base_state import BoardGameBaseState
@@ -270,15 +269,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
         x = p_stack.view((-1, 2, self.board_size, self.board_size))
-        # print(x)
-        # exit()
-        # x = p_stack.view((-1, self.input_size * 2))
-
-        # x = x.view((-1, 1, self.board_size, self.board_size))
-        # print(x.size())
         out: torch.Tensor = self.network(x)
-        # print(out.size())
-        # exit()
 
         out_soft_masked = torch.zeros_like(out)
         for n in range(len(x)):
@@ -324,10 +315,6 @@ class BoardGameActorNeuralNetwork(nn.Module):
         while True:
 
             rnds += 1
-            # if set_len <= bs:
-            #     rand_idx = torch.tensor(np.random.choice(set_len, bs, replace=True))
-            # else:
-            #     rand_idx = torch.tensor(np.random.choice(set_len, bs, replace=False))
             rand_idx = torch.randint(set_len, (self.nn_config.batch_size,))
 
             x = x_inp[rand_idx]

@@ -320,7 +320,6 @@ def _find_winning_move(
         state: HexBoardGameState,
         checked: set,
         current_node: (int, int),
-        term_nodes: set):
         term_nodes: set,
         is_trying=None):
     """
