@@ -1,22 +1,17 @@
+import copy
 import math
 # import multiprocessing
 import queue
 import random
-import copy
 import time
+from multiprocessing import Queue, Value
 from threading import Thread
 
 import numpy as np
-import torch
-
-from enviorments.base_environment import BaseEnvironment, BoardGameEnvironment
-from enviorments.base_state import BaseState, BoardGameBaseState
-
-from concurrent.futures import ProcessPoolExecutor
-
-from multiprocessing import Queue, Value, Lock
 from torch import multiprocessing as mp
 
+from enviorments.base_environment import BoardGameEnvironment
+from enviorments.base_state import BoardGameBaseState
 # executor = ProcessPoolExecutor()
 from rl_agent.critic import Critic
 from rl_agent.util import EGreedy
@@ -129,7 +124,8 @@ def parallel_rollout(agent,
                 root_state = copy.deepcopy(org_root_state)
                 value_prop = copy.deepcopy(org_value_prop)
 
-                _parallel_mc_rollout(root_state, agent, env, value_prop, e_greedy, use_prob=use_prob_not_max_action, use_critic_prob=use_critic_prob)
+                _parallel_mc_rollout(root_state, agent, env, value_prop, e_greedy, use_prob=use_prob_not_max_action,
+                                     use_critic_prob=use_critic_prob)
 
                 out_que.put(value_prop)
                 e_greedy.reset()
@@ -165,7 +161,7 @@ class MontecarloTreeSearch:
         self.search_node_map = {}
         self.debug = False
         self.rnds = 0
-        mp_context = mp.get_context('fork')
+        mp_context = mp.get_context('spawn')  # Todo - Needed to change this from "fork" so it didn't crash
 
         self.to_workers_message_que = mp_context.Queue()
         self.from_worker_message_que = mp_context.Queue()
@@ -182,7 +178,9 @@ class MontecarloTreeSearch:
         for n in range(worker_thread_count):
             use_prob = random.random() > 0.5
             p = mp_context.Process(target=parallel_rollout,
-                                   args=(self.agent, self.environment, self.to_workers_message_que, self.from_worker_message_que, e_greedy, self.fork_factor, use_prob, self.done_flag))
+                                   args=(self.agent, self.environment, self.to_workers_message_que,
+                                         self.from_worker_message_que, e_greedy, self.fork_factor, use_prob,
+                                         self.done_flag))
             p.start()
             self.mp_processes.append(p)
 
@@ -464,7 +462,8 @@ class MontecarloTreeSearch:
                 continue
 
             node = self._get_node_by_hash(child.node_hash)
-            confidence_bound = calculate_upper_confidence_bound_node_value(self.exploration_c, node.visits, parent_node.visits)
+            confidence_bound = calculate_upper_confidence_bound_node_value(self.exploration_c, node.visits,
+                                                                           parent_node.visits)
 
             node = self._get_node_by_hash(child.node_hash)
             if player_0_turn:
@@ -532,6 +531,10 @@ class MontecarloTreeSearch:
 
     def mc_tree_search(self,
                        root_state: BoardGameBaseState):
+        """
+        The Monte Carlo tree search.
+        TODO: Refactor code into smaller pieces.
+        """
         start_time = time.monotonic_ns()
         self.active_p_semaphore = 0
 

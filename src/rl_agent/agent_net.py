@@ -1,15 +1,13 @@
 import math
-import random
 import time
 
-import numpy as np
 import torch
 from torch import nn
 from torch.distributions import Categorical
 
 from enviorments.base_environment import BoardGameEnvironment
 from enviorments.base_state import BoardGameBaseState
-from rl_agent.util import NeuralNetworkConfig, get_action_visit_map_as_target_vec
+from rl_agent.util import NeuralNetworkConfig
 
 
 class BoardGameActorNeuralNetwork(nn.Module):
@@ -266,14 +264,11 @@ class BoardGameActorNeuralNetwork(nn.Module):
             keep_filter = x == 0
         else:
             pass
-            # keep_filter = x[:, :-1] == 0
-        # keep_filter_inv = torch.logical_not(keep_filter)
 
         p1_inp = torch.where(x == 1, 1.0, 0.0)
         p2_inp = torch.where(x == -1, 1.0, 0.0)
 
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
-        #
         x = p_stack.view((-1, 2, self.board_size, self.board_size))
         # print(x)
         # exit()
@@ -285,23 +280,12 @@ class BoardGameActorNeuralNetwork(nn.Module):
         # print(out.size())
         # exit()
 
-        # print("inp  ", inp_x)
-        # print("keep ", keep_filter)
-        # print("out   ", out)
-
         out_soft_masked = torch.zeros_like(out)
         for n in range(len(x)):
-            # print("inp row ", )
             valid_moves = out[n, keep_filter[n, :]]
-            # row_s = torch.sum(valid_moves)
-            # print("valid m moves ", valid_moves)
             soft_m_moves = self.soft_max(valid_moves)
-            # soft_m_moves = torch.div(valid_moves, row_s)
             soft_m_moves = torch.nan_to_num(soft_m_moves)
-            # print("soft m moves ", soft_m_moves)
             out_soft_masked[n, keep_filter[n, :]] = soft_m_moves
-        # print("out sm", out_soft_masked)
-        # exit()
         return out_soft_masked
 
     def train_from_battle(self,
@@ -436,23 +420,11 @@ class BoardGameActorNeuralNetwork(nn.Module):
     def _train_network(self,
                        inp_x,
                        inp_y):
+        """
+        Trains the network.
+        """
         self.train(True)
         loss_values = []
-
-        # for x_val, y_val in zip(inp_x, inp_y):
-        #     x = torch.Tensor([x_val])
-        #     y = torch.Tensor([y_val])
-        #
-        #     self.network.zero_grad()
-        #     self.opt.zero_grad()
-        #
-        #     pred = self.forward(x)
-        #
-        #     loss: torch.Tensor = self.loss_fn(pred, y)
-        #     loss_values.append(loss.tolist())
-        #
-        #     loss.backward()
-        #     self.opt.step()
 
         x_inp = torch.tensor(inp_x, dtype=torch.float)
         y_inp = torch.tensor(inp_y, dtype=torch.float)
@@ -468,29 +440,26 @@ class BoardGameActorNeuralNetwork(nn.Module):
         rest = set_len % bs
         currs = 0
         while not stop:
-            # while currs < set_len:
-            #     if (currs + bs) > set_len:
-            #         x = x_inp[:-rest]
-            #         y = y_inp[:-rest]
-            #     else:
-            #         x = x_inp[currs:currs + bs]
-            #         y = y_inp[currs:currs + bs]
-            #     currs += bs
-
             rnds += 1
             rand_idx = torch.randint(set_len, (self.nn_config.batch_size,))
             x = x_inp[rand_idx]
             y = y_inp[rand_idx]
 
+            # Sets gradients of all model parameters to zero
             self.network.zero_grad()
             self.opt.zero_grad()
 
+            # Creates a prediction
             pred = self.forward(x)
 
+            # Gets the cross entropy loss from the prediction.
             loss: torch.Tensor = self.loss_fn(pred, y)
             loss_values.append(loss.tolist())
 
+            # Computes the gradient of current tensor w.r.t. graph leaves
             loss.backward()
+
+            # Performs a single optimization step
             self.opt.step()
             if self.nn_config.data_passes is not None:
                 stop = (rnds / self.nn_config.batch_size) > self.nn_config.data_passes
@@ -505,6 +474,10 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
     def get_action_visit_map_as_target_vec(self,
                                            action_visit_map: {}):
+        """
+        TODO: Figure out exactly what it does.
+        Returns the action visit map as a target vector.
+        """
         possible_actions = self.environment.get_action_space()
         visit_sum = sum(action_visit_map.values())
         ret = []
@@ -518,6 +491,9 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
     def train_from_state_buffer(self,
                                 state_buffer):
+        """
+        Trains the network and returns the loss.
+        """
         torch.set_printoptions(profile="full", linewidth=1000)
 
         raw_x, y = [], []
@@ -526,7 +502,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
             raw_x.append(state)
             y.append(self.get_action_visit_map_as_target_vec(v_count_map))
 
-        x, inverted_idx_list = self._mabye_invert_input(raw_x)
+        x, inverted_idx_list = self._maybe_invert_input(raw_x)
 
         for inverted_idx in inverted_idx_list:
             y[inverted_idx] = self.environment.invert_action_space_vec(y[inverted_idx])
@@ -534,8 +510,11 @@ class BoardGameActorNeuralNetwork(nn.Module):
         loss = self._train_network(x, y)
         return loss
 
-    def _mabye_invert_input(self,
+    def _maybe_invert_input(self,
                             inp):
+        """
+        Inverts the input if the current player is not the player with id 0.
+        """
         x = []
         inverted_idx_list = []
         # invert if used
@@ -556,28 +535,34 @@ class BoardGameActorNeuralNetwork(nn.Module):
 
     def get_probability_distribution(self,
                                      state_list: [BoardGameBaseState]):
+        """
+        Returns the probability distribution.
+        """
 
-        x, inverted_idx_list = self._mabye_invert_input(state_list)
+        x, inverted_idx_list = self._maybe_invert_input(state_list)
         # predict
         prob_dist = self.forward(torch.tensor(x, dtype=torch.float))
         prob_dist = prob_dist.tolist()
 
-        # print()
-        # print(prob_dist)
         # de invert if necessary
         for inverted_idx in inverted_idx_list:
             prob_dist[inverted_idx] = self.environment.invert_action_space_vec(prob_dist[inverted_idx])
 
-        # print(prob_dist)
         return prob_dist
 
     def save_model(self,
                    fp):
+        """
+        Saves the model.
+        """
         torch.save(self.state_dict(), fp)
 
     @staticmethod
     def load_model(fp,
                    *args):
+        """
+        Loads the model.
+        """
         model = BoardGameActorNeuralNetwork(*args)
         model.load_state_dict(torch.load(fp))
         model.eval()
