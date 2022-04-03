@@ -42,7 +42,7 @@ class CriticNeuralNet(nn.Module):
         layers = [nn.Conv2d(in_channels=2, out_channels=k,
                             kernel_size=(5, 5),
                             padding=2,
-                            stride=1), nn.ReLU()]
+                            stride=1), self.nn_config.activation_function]
         # TODO: Prolly not the best way to loop
         for n in range(nr_layers - 1):
             layers.append(nn.Conv2d(
@@ -52,7 +52,7 @@ class CriticNeuralNet(nn.Module):
                 padding=1,
                 stride=1,
             ))
-            layers.append(nn.ReLU())
+            layers.append(self.nn_config.activation_function)
         layers.append(nn.Conv2d(
             in_channels=k,
             out_channels=1,

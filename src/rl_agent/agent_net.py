@@ -35,7 +35,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         self.loss_fn = torch.nn.CrossEntropyLoss()
         # self.loss_fn = torch.nn.L1Loss()
         # self.loss_fn = torch.nn.MSELoss()
-        self.opt = torch.optim.Adam(self.network.parameters(), self.nn_config.lr)
+        self.opt = self.nn_config.optimizer(self.network.parameters(), self.nn_config.lr)
         # self.opt = torch.optim.Adam(self.network.parameters())
         # self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0001)
         # self.opt = torch.optim.SGD(self.parameters(), lr=0.0001)
@@ -54,9 +54,9 @@ class BoardGameActorNeuralNetwork(nn.Module):
             layers.append(nn.MaxPool2d(kernel_size=(2, 2), stride=1))
 
         layers.append(nn.Flatten())
-        layers.append(nn.ReLU())
+        layers.append(self.nn_config.activation_function)
         layers.append(nn.Linear((20 * 5 * 5), 200))
-        layers.append(nn.ReLU())
+        layers.append(self.nn_config.activation_function)
         layers.append(nn.Linear(200, self.output_size))
         network = nn.Sequential(*layers)
 
@@ -98,7 +98,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         discounted_reward = end_result
         # TODO: handele draws
 
-        org_x, inverted_idx_list = self._mabye_invert_input(state_list)
+        org_x, inverted_idx_list = self._maybe_invert_input(state_list)
         org_y = []
 
         for _ in org_x:
