@@ -38,7 +38,7 @@ class MonteCarloTreeSearchAgent:
         self.worker_thread_count = worker_thread_count
         self.environment = environment
         self.train_buffer: [([int], [float])] = []
-        self.max_buffer_size = 1000
+        self.max_buffer_size = 300
 
         self.model: BoardGameActorNeuralNetwork = None
         self._build_network()
@@ -68,10 +68,10 @@ class MonteCarloTreeSearchAgent:
                                                            self.nn_input_size, output_size)
             self.model = model
 
-            critic_fp = fp + "_critic"
-            critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment,
-                                                      self.nn_input_size)
-            self.critic.model = critic_model
+            # critic_fp = fp + "_critic"
+            # critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment,
+            #                                           self.nn_input_size)
+            # self.critic.model = critic_model
 
             self.model.share_memory()
             self.critic.model.share_memory()
@@ -161,7 +161,6 @@ class MonteCarloTreeSearchAgent:
 
         # convert the vec to target dist
         all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
-        print(f'Target distance: {all_action_dist}')
 
         # put the target dist in the replay buffer
         replay_buffer.append((current_state, mc_visit_counts_map))
@@ -208,7 +207,6 @@ class MonteCarloTreeSearchAgent:
 
         torch.set_num_threads(self.worker_thread_count)
         while not game_done:
-
             if player_2 is None or current_state.current_player_turn() == 0:
                 current_state, r, game_done = self._take_game_move(current_state, mcts, replay_buffer, critic_train_set)
             else:
@@ -264,11 +262,31 @@ class MonteCarloTreeSearchAgent:
         """
         Plays a game against a human player in the terminal.
         """
-        self.run_episode(
-            player_2=self.human_move,
-            train_critic=False,
-            flip_start=False,
-        )
+
+        current_state = self.environment.get_initial_state()
+
+        if random.random() > 0.5:
+            current_state.change_turn()
+
+        game_done = False
+        while not game_done:
+
+            self.environment.display_state(current_state)
+            if current_state.current_player_turn() == 0:
+                prob_dist = self.model.get_probability_distribution([current_state])[0]
+                target_val = max(prob_dist)
+                action_idx = prob_dist.index(target_val)
+                action = self.environment.get_action_space()[action_idx]
+
+                current_state, r, game_done = self.environment.act(current_state, action)
+            else:
+
+                current_state, r, game_done = self.human_move(current_state)
+        # self.run_episode(
+        #     player_2=self.human_move,
+        #     train_critic=False,
+        #     flip_start=False,
+        # )
 
     def run_topp(self,
                  n,
@@ -296,7 +314,7 @@ class MonteCarloTreeSearchAgent:
         topp = TOPP(
             total_itrs=num_games,
             actor_nn_config=self.actor_nn_config,
-            num_games_in_matches=200,
+            num_games_in_matches=100,
             num_models_to_save=topp_saves,
             environment=self.environment)
 

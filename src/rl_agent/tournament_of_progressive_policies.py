@@ -71,8 +71,10 @@ class TOPP:
         else:
             action_space = self.environment.get_action_space()
             idx = random.choices(range(len(action_space)), weights=prob_dist)[0]
-
             action = action_space[idx]
+            # target_val = max(prob_dist)
+            # action_idx = prob_dist.index(target_val)
+            # action = self.environment.get_action_space()[action_idx]
 
         return action
 

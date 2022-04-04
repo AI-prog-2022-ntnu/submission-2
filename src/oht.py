@@ -1,3 +1,4 @@
+import copy
 import math
 import time
 
@@ -131,11 +132,25 @@ class OHTClient(ActorClient):
         # print("post", s_vec.get_as_vec())
 
         self.env.display_state(used_state, display_internal=False)
-        prob_dist = self.agent.model.get_probability_distribution([used_state])[0]
 
-        target_val = max(prob_dist)
-        action_idx = prob_dist.index(target_val)
-        action = self.env.get_action_space()[action_idx]
+        winning_move = self.env.get_state_winning_move(used_state)
+
+        other_s = copy.deepcopy(used_state)
+        other_s.change_turn()
+        losing_move = self.env.get_state_winning_move(other_s)
+
+        if winning_move is not None:
+            print("has winning")
+            action = winning_move
+        elif losing_move is not None:
+            print("has losing")
+            action = losing_move
+        else:
+            prob_dist = self.agent.model.get_probability_distribution([used_state])[0]
+
+            target_val = max(prob_dist)
+            action_idx = prob_dist.index(target_val)
+            action = self.env.get_action_space()[action_idx]
 
         # action = self.agent.get_tree_search_action(used_state, self.mcts)
         print(action)

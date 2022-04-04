@@ -45,20 +45,32 @@ class BoardGameActorNeuralNetwork(nn.Module):
         """
         Creates the conv network model.
         """
-        layers = [nn.Conv2d(in_channels=2, out_channels=10, kernel_size=(5, 5), padding=2, stride=1),
-                  nn.MaxPool2d(kernel_size=(2, 2), stride=1), nn.ReLU()]
-
-        for n in range(nr_layers-1):
-            layers.append(
-                nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(3, 3), padding=1, stride=1))
-            layers.append(nn.MaxPool2d(kernel_size=(2, 2), stride=1))
-
+        # layers = [nn.Conv2d(in_channels=2, out_channels=10, kernel_size=(5, 5), padding=2, stride=1),
+        #           nn.MaxPool2d(kernel_size=(2, 2), stride=1), nn.ReLU()]
+        #
+        # for n in range(nr_layers-1):
+        #     layers.append(
+        #         nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(3, 3), padding=1, stride=1))
+        #     layers.append(nn.MaxPool2d(kernel_size=(2, 2), stride=1))
+        layers = [
+            nn.Conv2d(in_channels=2, out_channels=12, kernel_size=(5, 5), padding=3),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=12, out_channels=10, kernel_size=(3, 3))
+        ]
         layers.append(nn.Flatten())
-        layers.append(self.nn_config.activation_function)
-        layers.append(nn.Linear((20 * 5 * 5), 200))
-        layers.append(self.nn_config.activation_function)
-        layers.append(nn.Linear(200, self.output_size))
+        # layers.append(self.nn_config.activation_function)
+        layers.append(nn.ELU())
+        layers.append(nn.Linear((10 * 7 * 7), 300))
+        layers.append(nn.ELU())
+        layers.append(nn.Linear(300, self.output_size))
         network = nn.Sequential(*layers)
+
+        def init_weights(m):
+            if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+                torch.nn.init.xavier_uniform(m.weight)
+                m.bias.data.fill_(0.01)
+
+        network.apply(init_weights)
 
         return network
 
@@ -78,6 +90,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
         x = p_stack.view((-1, 2, self.board_size, self.board_size))
         out: torch.Tensor = self.network(x)
+        # print(out.size())
+        # exit()
 
         out_soft_masked = torch.zeros_like(out)
         for n in range(len(x)):
@@ -85,6 +99,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
             soft_m_moves = self.soft_max(valid_moves)
             soft_m_moves = torch.nan_to_num(soft_m_moves)
             out_soft_masked[n, keep_filter[n, :]] = soft_m_moves
+
         return out_soft_masked
 
     def train_from_battle(self,

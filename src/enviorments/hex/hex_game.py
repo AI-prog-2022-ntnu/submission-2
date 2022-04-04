@@ -348,6 +348,8 @@ def _find_winning_move(
             elif chek_node_value == 0 and is_trying is None:
                 # print("hop v")
                 try_hops.append(node)
+            elif is_trying is not None and node in term_nodes:
+                return move
 
             if move is not None:
                 return move
@@ -390,6 +392,8 @@ def find_winning_move(
     for node in start_nodes:
         if state.get_board_val(node[0], node[1]) == node_v:
             move = _find_winning_move(node_v, state, checked, node, term_nodes)
+        elif state.get_board_val(node[0], node[1]) == 0:
+            move = _find_winning_move(node_v, state, checked, node, term_nodes, is_trying=node)
 
         if move is not None:
             return move

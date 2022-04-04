@@ -161,7 +161,7 @@ class MontecarloTreeSearch:
         self.search_node_map = {}
         self.debug = False
         self.rnds = 0
-        mp_context = mp.get_context('spawn')  # Todo - Needed to change this from "fork" so it didn't crash
+        mp_context = mp.get_context('fork')  # Todo - Needed to change this from "fork" so it didn't crash
 
         self.to_workers_message_que = mp_context.Queue()
         self.from_worker_message_que = mp_context.Queue()
@@ -227,6 +227,7 @@ class MontecarloTreeSearch:
     def _clear_worker_que(self):
         try_fetch = True
         num_burned = 0
+        num_applied = 0
 
         while try_fetch:
             try:
@@ -241,14 +242,15 @@ class MontecarloTreeSearch:
         try_fetch = True
         while try_fetch:
             try:
-                _ = self.from_worker_message_que.get_nowait()
-                num_burned += 1
+                v = self.from_worker_message_que.get_nowait()
+                self._apply_value_propegator(v)
+                num_applied += 1
                 self.active_p_semaphore -= 1
             except queue.Empty as e:
                 try_fetch = False
 
         if self.debug:
-            print(f"burned {num_burned} que tasks")
+            print(f"burned {num_burned} que tasks. applied {num_applied} que tasks")
 
     def _concurrency_tickler(self):
         try_fetch = True
@@ -491,8 +493,19 @@ class MontecarloTreeSearch:
         for _ in range(self.worker_thread_count * 10):
             self.to_workers_message_que.put(-1)
 
-        if self.clean_thread is not None:
-            self.clean_thread.join()
+        # if self.clean_thread is not None:
+        #     self.clean_thread.kill()
+        while True:
+            try:
+                self.from_worker_message_que.get_nowait()
+            except Exception:
+                break
+
+        while True:
+            try:
+                self.to_workers_message_que.get_nowait()
+            except Exception:
+                break
 
         self.from_worker_message_que.close()
         self.from_worker_message_que.join_thread()
@@ -509,8 +522,8 @@ class MontecarloTreeSearch:
                    is_training
                    ):
         while time.monotonic_ns() < stop_t:
-            # print(self.from_worker_message_que.qsize())
 
+            # print(self.active_p_semaphore)
             search_round = self._concurrency_tickler()
             if search_round:
                 value_prop = StateValuePropegator()
@@ -535,6 +548,7 @@ class MontecarloTreeSearch:
         The Monte Carlo tree search.
         TODO: Refactor code into smaller pieces.
         """
+
         start_time = time.monotonic_ns()
         self.active_p_semaphore = 0
 
@@ -600,7 +614,7 @@ class MontecarloTreeSearch:
             # print("\n" * 20)
             valid_actons = self.environment.get_valid_actions(root_s_node.state)
             ret = {}
-            # print("\n\n\nHAS WINNING MOVE")
+            # print("\n\n\nHAS WINNING MOVE ", winning_m)
             # self.environment.display_state(root_state)
             for act in valid_actons:
 
@@ -619,7 +633,7 @@ class MontecarloTreeSearch:
         root_s_node.state.change_turn()
         if losing_m is not None:
             ret = {losing_m: 1}
-            # print("\n\n\nFound losing move MOVE")
+            # print("\n\n\nFound losing move MOVE", losing_m)
             for c in root_s_node.children:
                 c: MonteCarloTreeSearchNode = c
                 if ret.get(c.action_from_parent) is None:
