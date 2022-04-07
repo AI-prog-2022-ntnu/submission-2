@@ -30,40 +30,17 @@ class BoardGameActorNeuralNetwork(nn.Module):
         else:
             self.input_size = input_size + 1
 
-        self.network = self._get_conv_network(self.nn_config.nr_layers)
+        self.network = self._get_conv_network()
         self.soft_max = torch.nn.Softmax(dim=-1)
         self.loss_fn = torch.nn.CrossEntropyLoss()
-        # self.loss_fn = torch.nn.L1Loss()
-        # self.loss_fn = torch.nn.MSELoss()
-        self.opt = self.nn_config.optimizer(self.network.parameters(), self.nn_config.lr)
-        # self.opt = torch.optim.Adam(self.network.parameters())
-        # self.opt = torch.optim.RMSprop(self.parameters(), lr=0.0001)
-        # self.opt = torch.optim.SGD(self.parameters(), lr=0.0001)
+        self.opt = self.nn_config.optimizer(self.network.parameters(), lr=self.nn_config.lr)
+        self.opt = torch.optim.RMSprop(self.parameters())
 
-    def _get_conv_network(self,
-                          nr_layers):
+    def _get_conv_network(self):
         """
         Creates the conv network model.
         """
-        # layers = [nn.Conv2d(in_channels=2, out_channels=10, kernel_size=(5, 5), padding=2, stride=1),
-        #           nn.MaxPool2d(kernel_size=(2, 2), stride=1), nn.ReLU()]
-        #
-        # for n in range(nr_layers-1):
-        #     layers.append(
-        #         nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(3, 3), padding=1, stride=1))
-        #     layers.append(nn.MaxPool2d(kernel_size=(2, 2), stride=1))
-        layers = [
-            nn.Conv2d(in_channels=2, out_channels=12, kernel_size=(5, 5), padding=3),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=12, out_channels=10, kernel_size=(3, 3))
-        ]
-        layers.append(nn.Flatten())
-        # layers.append(self.nn_config.activation_function)
-        layers.append(nn.ELU())
-        layers.append(nn.Linear((10 * 7 * 7), 300))
-        layers.append(nn.ELU())
-        layers.append(nn.Linear(300, self.output_size))
-        network = nn.Sequential(*layers)
+        network = nn.Sequential(*self.nn_config.network_layout)
 
         def init_weights(m):
             if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
@@ -90,142 +67,15 @@ class BoardGameActorNeuralNetwork(nn.Module):
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
         x = p_stack.view((-1, 2, self.board_size, self.board_size))
         out: torch.Tensor = self.network(x)
-        # print(out.size())
-        # exit()
 
         out_soft_masked = torch.zeros_like(out)
         for n in range(len(x)):
             valid_moves = out[n, keep_filter[n, :]]
-            soft_m_moves = self.soft_max(valid_moves)
+            soft_m_moves = valid_moves  # self.soft_max(valid_moves)
             soft_m_moves = torch.nan_to_num(soft_m_moves)
             out_soft_masked[n, keep_filter[n, :]] = soft_m_moves
 
         return out_soft_masked
-
-    def train_from_battle(self,
-                          state_list: [BoardGameBaseState],
-                          end_result: int,
-                          discount: float,
-                          lr: float):
-
-        self.train(True)
-        player_1_won = end_result == 1
-        discounted_reward = end_result
-        # TODO: handele draws
-
-        org_x, inverted_idx_list = self._maybe_invert_input(state_list)
-        org_y = []
-
-        for _ in org_x:
-            if not player_1_won:
-                # if player 2 won we need to invert the reward
-                update = discounted_reward * -1
-            else:
-                update = discounted_reward
-            discounted_reward *= discount
-            org_y.append([update])
-        org_y = list(reversed(org_y))
-
-        x_inp = torch.tensor(org_x, dtype=torch.float)
-
-        y_inp = torch.tensor(org_y, dtype=torch.float)
-
-        bs = 5
-        rnds = 0
-        data_passes = 2
-        set_len = len(x_inp)
-
-        while True:
-
-            rnds += 1
-            rand_idx = torch.randint(set_len, (self.nn_config.batch_size,))
-
-            x = x_inp[rand_idx]
-            y = y_inp[rand_idx]
-
-            self.network.zero_grad()
-            self.opt.zero_grad()
-
-            # print("inp s", x.size())
-            pred = self.forward(x)
-
-            # print("pred", pred)
-            # print("pred s", pred.size())
-            action_idx = torch.argmax(pred, dim=1)
-            # print("action", action_idx)
-            max_action_val = pred[torch.arange(pred.size(0)), action_idx]
-            # print("action_v ", max_action_val)
-            log_p = -torch.log(max_action_val)
-            # print("log p", log_p)
-            # print("action_v ", torch.log(pred[:, action_idx[:]]))
-            # print("y", torch.squeeze(y))
-            loss = torch.sqrt(torch.mean(log_p * torch.squeeze(y)))
-
-            # print("loss", loss)
-            loss.backward()
-            self.opt.step()
-
-            if (rnds / bs) > data_passes:
-                break
-
-        # mae_loss = torch.nn.L1Loss()
-        # tense_1 = torch.Tensor([1])
-        # tense_0 = torch.Tensor([0])
-        # x, inverted_idx_list = self._mabye_invert_input(state_list)
-        # for state, x in zip(reversed(state_list), reversed(x)):
-        #     state: BoardGameBaseState = state
-        #     update = discounted_reward
-        #     if not player_1_won:
-        #         # if player 2 won we need to invert the reward
-        #         update = discounted_reward * -1
-        #
-        #     self.network.zero_grad()
-        #     self.opt.zero_grad()
-        #     pred = self.forward(torch.tensor([x], dtype=torch.float))
-        #     if torch.sum(pred) == 0:
-        #         # print("0 sum in agent net")
-        #         continue
-        #     # print("pred", pred)
-        #     # max_v = torch.max(pred)
-        #     m = Categorical(pred)
-        #     # print("m", m)
-        #     action_idx = torch.argmax(pred, dim=1)
-        #     # print("action", action_idx)
-        #     # print("action_v ", pred[:, action_idx])
-        #     # print("action_v ", torch.log(pred[:, action_idx]))
-        #
-        #     # mean = torch.mean(pred)
-        #     # var = torch.var(pred)
-        #     # log_p = -((pred[:, action_idx] - mean) ** 2) / (2 * var) - math.log(math.sqrt(2 * math.pi))
-        #     # return -((value - self.loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
-        #     # print("mine", log_p)
-        #     # print("logp", m.log_prob(action_idx))
-        #     # exit()
-        #     loss = -m.log_prob(action_idx) * discounted_reward
-        #     # print("loss", loss)
-        #     loss.backward()
-        #     # exit()
-        #     # if player_1_won:
-        #     #     loss = mae_loss(tense_1, max_v)
-        #     # else:
-        #     #     loss = mae_loss(tense_0, max_v)
-        #     # loss.backward()
-        #
-        #     # for param in self.network.parameters():
-        #     #     param.grad *= update * lr * -1
-        #     self.opt.step()
-        #
-        #     # with torch.no_grad():
-        #     #     for param in self.network.parameters():
-        #     #         # print("new")
-        #     #         # print(param)
-        #     #         # print(param.grad)
-        #     #         param -= update * lr * param.grad
-        #     #         # print(param)
-        #     #         # print()
-        #
-        #     discounted_reward *= discount
-        self.train(False)
 
     def _train_network(self,
                        inp_x,
@@ -262,8 +112,10 @@ class BoardGameActorNeuralNetwork(nn.Module):
             # Creates a prediction
             pred = self.forward(x)
 
+            _, labels = torch.max(y, dim=1)
+
             # Gets the cross entropy loss from the prediction.
-            loss: torch.Tensor = self.loss_fn(pred, y)
+            loss: torch.Tensor = self.loss_fn(pred, labels)
             loss_values.append(loss.tolist())
 
             # Computes the gradient of current tensor w.r.t. graph leaves
@@ -277,7 +129,6 @@ class BoardGameActorNeuralNetwork(nn.Module):
                 stop = rnds > self.nn_config.train_iterations
             if stop_t is not None and not stop:
                 stop = time.monotonic_ns() > stop_t
-        # print(f"AGENT: completed {rnds} training epochs with batch size {self.nn_config.batch_size} in the {wait_milli_sec}ms limit")
 
         self.train(False)
         return loss_values
@@ -352,6 +203,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         x, inverted_idx_list = self._maybe_invert_input(state_list)
         # predict
         prob_dist = self.forward(torch.tensor(x, dtype=torch.float))
+        prob_dist[prob_dist != 0] = self.soft_max(prob_dist[prob_dist != 0])
         prob_dist = prob_dist.tolist()
 
         # de invert if necessary

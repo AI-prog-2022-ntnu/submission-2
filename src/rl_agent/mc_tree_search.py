@@ -1,7 +1,6 @@
 import copy
 import math
 # import multiprocessing
-import queue
 import random
 import time
 from multiprocessing import Queue, Value
@@ -13,7 +12,6 @@ from torch import multiprocessing as mp
 from enviorments.base_environment import BoardGameEnvironment
 from enviorments.base_state import BoardGameBaseState
 # executor = ProcessPoolExecutor()
-from rl_agent.critic import Critic
 from rl_agent.util import EGreedy
 
 
@@ -116,9 +114,11 @@ def parallel_rollout(agent,
         current_fork_num = 0
         if msg is not None:
             org_root_state, org_value_prop, use_critic_prob = msg
-            while current_fork_num <= fork_factor:
+            while current_fork_num < fork_factor:
                 if done_flag.value:
                     break
+
+                # todo: figure out wheter to uncomment this and apply the forked rollouts visits
                 # if current_fork_num > 0:
                 #     org_value_prop.tree_search_nodes_has_visits_pre_propegated = False
                 root_state = copy.deepcopy(org_root_state)
@@ -138,7 +138,6 @@ def calculate_upper_confidence_bound_node_value(exploration_c,
                                                 node_visits,
                                                 parent_visits):
     ucbt = exploration_c * np.sqrt(np.divide(np.log1p(parent_visits), (node_visits + 1)))
-
     return ucbt
 
 
@@ -161,10 +160,10 @@ class MontecarloTreeSearch:
         self.search_node_map = {}
         self.debug = False
         self.rnds = 0
-        mp_context = mp.get_context('fork')  # Todo - Needed to change this from "fork" so it didn't crash
+        mp_context = mp.get_context('fork')
 
-        self.to_workers_message_que = mp_context.Queue()
-        self.from_worker_message_que = mp_context.Queue()
+        self.to_workers_message_que = Queue()
+        self.from_worker_message_que = Queue()
 
         self.clean_thread = None
 
@@ -185,7 +184,6 @@ class MontecarloTreeSearch:
             self.mp_processes.append(p)
 
         self.active_p_semaphore = 0
-
         self.node_map = {}
 
         self.critic_eval_frac = 0
@@ -195,36 +193,10 @@ class MontecarloTreeSearch:
     ################################
 
     def _calculate_critic_eval_frac(self):
-        critic: Critic = self.agent.critic
-
-        if len(critic.latest_set_loss_list) < 5:
-            for _ in range(10):
-                critic.latest_set_loss_list.insert(0, 100)
-
-        last_5_loss_avg = sum(critic.latest_set_loss_list[-5:]) / 5
-        if last_5_loss_avg < 0.10:
-            critic_prob = max((1 - last_5_loss_avg), 0) / 4
-        else:
-            critic_prob = 0
-
-        return critic_prob
-
-    # def _concurrency_tickler(self):
-    #     value = None
-    #     if self.active_p_semaphore < self.worker_thread_count + 5:
-    #         # if there are more slots left try to fetch and continue if no one is free
-    #         # TODO: mabye loop this to fetch untill the que is empty
-    #         try:
-    #             value: StateValuePropegator = self.from_worker_message_que.get_nowait()
-    #         except queue.Empty as e:
-    #             pass
-    #     else:
-    #         # if all the slots are full wait untill a worker is done
-    #         value = self.from_worker_message_que.get()
-    #         self.active_p_semaphore -= 1
-    #         self._apply_value_propegator(value)
+        return 0
 
     def _clear_worker_que(self):
+
         try_fetch = True
         num_burned = 0
         num_applied = 0
@@ -233,11 +205,9 @@ class MontecarloTreeSearch:
             try:
                 _ = self.to_workers_message_que.get_nowait()
                 num_burned += 1
-                self.active_p_semaphore -= 1
-            except queue.Empty as e:
+                self.active_p_semaphore -= self.fork_factor
+            except Exception as e:
                 try_fetch = False
-
-        # self._have_all_registerd_done()
 
         try_fetch = True
         while try_fetch:
@@ -246,33 +216,37 @@ class MontecarloTreeSearch:
                 self._apply_value_propegator(v)
                 num_applied += 1
                 self.active_p_semaphore -= 1
-            except queue.Empty as e:
+            except Exception as e:
                 try_fetch = False
 
         if self.debug:
             print(f"burned {num_burned} que tasks. applied {num_applied} que tasks")
 
     def _concurrency_tickler(self):
-        try_fetch = True
+        continue_fetching = True
         # clear the que if there are any items in it:
-        while try_fetch:
+        while continue_fetching:
             try:
                 # if we got a value from the que apply it to the current tree
                 value: StateValuePropegator = self.from_worker_message_que.get_nowait()
                 self.active_p_semaphore -= 1
                 self._apply_value_propegator(value)
-            except queue.Empty as e:
-                try_fetch = False
+            except Exception as e:
+                continue_fetching = False
 
+        search_round = False
         # if there are to many threads active hang untill some finishes
         if self.active_p_semaphore > self.worker_thread_count * self.fork_factor:
             try:
-                value = self.from_worker_message_que.get(timeout=(20 / 1000))
+                value = self.from_worker_message_que.get(timeout=20 / 1000)
                 self.active_p_semaphore -= 1
                 self._apply_value_propegator(value)
             except Exception as e:
-                return False
-        return True
+                pass
+        else:
+            search_round = True
+
+        return search_round
 
     def _paralell_rollout(self,
                           child,
@@ -291,9 +265,6 @@ class MontecarloTreeSearch:
         self.rnds += 1
         prop_val = value_prop.value
         discounted_prop_val = value_prop.value
-        # TODO: URGENT figure out why the last and second element of the change list are equal
-        # print(change_list)
-        # change_list.pop(-1)
         for node_hash in reversed(value_prop.rollout_nodes_state_hashes):
             discounted_prop_val *= self.value_discount
             node = self._get_node_by_hash(node_hash)
@@ -312,6 +283,11 @@ class MontecarloTreeSearch:
 
     def _pre_apply_tree_search_node_visits(self,
                                            value_prop):
+        """
+        becase the rollouts are done asycronosly to the traversal we need to pre apply the visit count for the nodes.
+        :param value_prop:
+        :return:
+        """
         if value_prop.tree_search_nodes_has_visits_pre_propegated:
             raise Exception("illigal state")
 
@@ -377,9 +353,6 @@ class MontecarloTreeSearch:
                      stop_t,
                      d=0):
 
-        # if time.monotonic_ns() > stop_t:
-        #     return
-
         # # if the node is not expanded, expand it
         if not parent.has_been_expanded:
             self._expand_node(parent)
@@ -414,37 +387,19 @@ class MontecarloTreeSearch:
 
         # if the child has been rolled out we continue down the tree
         if child.has_been_rolled_out:
-            # if self._get_node_by_hash(child.node_hash).visits > 0:
             if not child.has_been_expanded:
                 self._expand_node(child)
 
             self._tree_search(parent=child, value_prop=value_prop, d=d, stop_t=stop_t)
         else:
             # if the child has not been rolled out we roll it out
-            # self._paralell_rollout(child, update_list)
             self._pre_apply_tree_search_node_visits(value_prop)
-
-            # new_s, _, term = self.environment.act(parent.state, child.action_from_parent)
-            # if term:
-            #     print("WAAAAA")
-            # child.state = new_s
             self._paralell_rollout(child, value_prop)
-
-            # value = self.agent.critic.get_state_value(child.state)[0]
-            # update_list.insert(0, value)
-            # update_list.append(child.node_hash)
-            # self._apply_node_change_list(change_list=update_list)
 
     def pick_child(self,
                    search_node: MonteCarloTreeSearchNode):
         player_0_turn = search_node.state.current_player_turn() == 0
-        found = False
 
-        # guaranteed_win_cand = self.get_guaranteed_win(search_node, player_0_turn)
-        # if guaranteed_win_cand is not None:
-        #     return guaranteed_win_cand
-
-        unsutable = []
         best_child = random.choice(search_node.children)
 
         if player_0_turn:
@@ -452,11 +407,6 @@ class MontecarloTreeSearch:
         else:
             best_child_value = float("inf")
 
-        # while not found:
-        ## find candidate ##
-        # if random.random() > 0.9:  # TODO: sadfj;sadfsad;fldjsfaljkif not child.has_been_expanded:
-        #     best_child = random.choice(search_node.children)
-        # else:
         parent_node = self._get_node_by_hash(search_node.node_hash)
         for child in search_node.children:
             if child.has_terminal_child:
@@ -469,15 +419,11 @@ class MontecarloTreeSearch:
 
             node = self._get_node_by_hash(child.node_hash)
             if player_0_turn:
-                # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) + confidence_bound
-                # val = ((node.value + 1) / (node.visits + 1)) + confidence_bound
                 val = ((node.discounted_value + 1) / (node.visits + 1)) + confidence_bound
                 if val > best_child_value:
                     best_child_value = val
                     best_child = child
             else:
-                # val = ((node.p1_wins - node.p2_wins) / (node.visits + 1)) - confidence_bound
-                # val = ((node.value + 1) / (node.visits + 1)) - confidence_bound
                 val = ((node.discounted_value + 1) / (node.visits + 1)) - confidence_bound
                 if val < best_child_value:
                     best_child_value = val
@@ -493,8 +439,6 @@ class MontecarloTreeSearch:
         for _ in range(self.worker_thread_count * 10):
             self.to_workers_message_que.put(-1)
 
-        # if self.clean_thread is not None:
-        #     self.clean_thread.kill()
         while True:
             try:
                 self.from_worker_message_que.get_nowait()
@@ -512,35 +456,22 @@ class MontecarloTreeSearch:
         self.to_workers_message_que.close()
         self.to_workers_message_que.join_thread()
         for p in self.mp_processes:
-            # p.kill()
-            # p.join(timeout=0.01)
             p.kill()
 
     def searh_loop(self,
                    stop_t,
                    root_s_node,
-                   is_training
                    ):
         while time.monotonic_ns() < stop_t:
-
-            # print(self.active_p_semaphore)
             search_round = self._concurrency_tickler()
             if search_round:
                 value_prop = StateValuePropegator()
                 value_prop.tree_search_node_state_hashes.append(root_s_node.node_hash)
-
                 self._tree_search(parent=root_s_node, value_prop=value_prop, stop_t=stop_t)
 
-        # if not self.is_training:
-        #     time.sleep(0.2)
-        # else:
         while self.active_p_semaphore > 0:
-            # print(self.active_p_semaphore)
             self._concurrency_tickler()
-        # time.sleep(0.1)
-        # print(f"start_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
         self._clear_worker_que()
-        # print(f"end_clear at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
 
     def mc_tree_search(self,
                        root_state: BoardGameBaseState):
@@ -550,7 +481,6 @@ class MontecarloTreeSearch:
         """
 
         start_time = time.monotonic_ns()
-        self.active_p_semaphore = 0
 
         wait_milli_sec = self.agent.ms_tree_search_time
         c_time = time.monotonic_ns()
@@ -573,8 +503,8 @@ class MontecarloTreeSearch:
         # print(f"fetch root at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
 
         self.critic_eval_frac = 0.0  # self._calculate_critic_eval_frac()
-        # print(f"Using a critic eval frac of {self.critic_eval_frac * 100}%")
 
+        # add some randomness to the 100 first traversals
         self.e_greedy = EGreedy(
             init_val=0.8,
             min_val=0.0,
@@ -592,72 +522,40 @@ class MontecarloTreeSearch:
         if not root_s_node.has_been_expanded:
             self._expand_node(root_s_node)
 
-        # if root_s_node.has_terminal_child:
-        #     print("\n\n\n\n")
-
-        # winning_m = self.environment.get_state_winning_move(root_s_node.state)
-        # if winning_m is not None:
-        #     ret = {}
-        #     # print("\n\n\nHAS WINNING MOVE")
-        #     for c in root_s_node.children:
-        #         c: MonteCarloTreeSearchNode = c
-        #         # c.state.change_turn()
-        #         # done = self.environment.is_state_won(c.state)  # no fucking clue why this does not work like everything else. the same shitty method is called elswher and works
-        #         if c.terminal:
-        #             ret[c.action_from_parent] = 1
-        #         else:
-        #             ret[c.action_from_parent] = 0
-        #     return ret, {}
-
         winning_m = self.environment.get_state_winning_move(root_s_node.state)
         if winning_m is not None:
-            # print("\n" * 20)
+            print("found winning move ", winning_m)
             valid_actons = self.environment.get_valid_actions(root_s_node.state)
             ret = {}
-            # print("\n\n\nHAS WINNING MOVE ", winning_m)
-            # self.environment.display_state(root_state)
             for act in valid_actons:
 
                 # this is a shit show
                 s2, r, d = self.environment.act(state=root_state, action=act, inplace=False)
                 if self.environment.get_winning_player_id(s2) is not None:
-                    # self.environment.display_state(s2)
                     ret[act] = 1
                 else:
                     ret[act] = 0
-            # print(ret)
-            return ret, {}
+            return ret
 
         root_s_node.state.change_turn()
         losing_m = self.environment.get_state_winning_move(root_s_node.state)
         root_s_node.state.change_turn()
         if losing_m is not None:
             ret = {losing_m: 1}
-            # print("\n\n\nFound losing move MOVE", losing_m)
+            print("found losing move ", losing_m)
             for c in root_s_node.children:
                 c: MonteCarloTreeSearchNode = c
                 if ret.get(c.action_from_parent) is None:
                     ret[c.action_from_parent] = 0
 
-            return ret, {}
+            return ret
 
-        # print(f"calc stop_t at start t +: {math.floor((time.monotonic_ns() - start_time) / 1000000)}ms")
-
-        # for i in range(num_rollouts):
-
-        # is_training = True
         self.rnds = 0
-        # self.clean_thread = Thread(target=self.searh_loop, args=(stop_t, root_s_node, is_training))
-        # self.clean_thread.start()
-        # wait_t_ajusted = ((stop_t - time.monotonic_ns()) / 1000000)
 
-        self.searh_loop(stop_t, root_s_node, True)
-        # print(f"wait t -: {(wait_t_ajusted)}ms,  f conf ms{self.agent.ms_tree_search_time}")
-
-        # time.sleep(max(0, wait_t_ajusted) / 1000)
+        self.active_p_semaphore = 0
+        self.searh_loop(stop_t, root_s_node)
 
         ret = {}  # ehhhh
-        ret_2_electric_bogaloo = {}  # ehhhh
 
         max_v, max_a = 0, None
         v_sum = 0
@@ -673,30 +571,13 @@ class MontecarloTreeSearch:
                 max_a = child_s_node.action_from_parent
                 max_v = node.visits
 
-            # TODO: CONFIUGURE FROM ELSWHERE
-            # if node.visits > 30:
-            #     # val = node.p1_wins if child_s_node.state.current_player_turn() == 0 else node.p2_wins
-            #     val = node.value
-            #     v = (val / node.visits)
-            #     ret_2_electric_bogaloo[child.state] = v
-
-        ret_2_electric_bogaloo[root_s_node.state] = root_node.discounted_value / root_node.visits
-
-        # print(f"end agr at stop_t -: {math.floor((time.monotonic_ns() - stop_t) / 1000000)}ms")
-
         if self.debug:
             print(f"completed {self.rnds} rollouts in the {wait_milli_sec}ms limit")
             p_dists = self.agent.model.get_probability_distribution([root_s_node.state])[0]
 
-            state_vals = self.agent.critic.get_states_value([c.state for c in root_s_node.children])
-
-            # print(self.agent.model.forward(torch.Tensor([root_s_node.state.get_as_vec()])))
-            # print(p_dists)
-
             print(f"parent visits: {root_node.visits}, value: {root_node.value}")
             v_count_sum = 0
-            for c, critic_q_val in zip(root_s_node.children, state_vals):
-                critic_q_val = critic_q_val[0]
+            for c in root_s_node.children:
                 node = self._get_node_by_hash(c.node_hash)
                 v_count_sum += node.visits
 
@@ -705,45 +586,19 @@ class MontecarloTreeSearch:
 
                 # print(f"action {c.action_from_parent} -> {c.state.get_as_vec()} node has {node.visits} visits value {node.value} value ->  {node.value / (node.visits + 1)}")  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
                 print(
-                    "action {} ->  node visits: {:<4} value: {:<9.3f} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<9.4}  |critic Q(s,a)(with discount)| pred: {:<9.3} actual: {:<8.4}  error: {:<8.4} ".format(
+                    "action {} ->  node visits: {:<4} value: {:<9.3f} v{:<9} | agent| pred: {:<9.3} actual: {:<8.4} error: {:<9.4}".format(
                         c.action_from_parent,
                         # c.state.get_as_vec(),
                         node.visits,
                         float(node.discounted_value),
+                        node.value,
                         p_dist_val,
                         node.visits / v_sum,
                         p_dist_val - ((node.visits + 1) / (v_sum + 1)),
-                        critic_q_val,
-                        (node.discounted_value + 1) / (node.visits + 1),
-                        critic_q_val - ((node.discounted_value + 1) / (node.visits + 1))
                     ))  # + {calculate_upper_confidence_bound_node_value(node, root_node)}")
             print(f"v count sum: {v_count_sum}")
             # print(self.node_map)
 
             end_time = time.monotonic_ns()
             print(f"mc tree search RTT: {math.floor((end_time - start_time) / 1000000)}ms")
-        return ret, ret_2_electric_bogaloo
-
-
-"""
-
-select-> expand -> sim -> backup
-
-tror bare man skal traversjere ned og expande/rulle ut nodene as you go
-
-
-Selection:
-1. select some node
-2. if node is:
-    - already rolled out -> expand
-    - not rolled out -> roll out
-
-Expansion:
-if any of the expanded nodes have been part of a rollout mark the node as already rolled out
-
-Simulation:
-
-
-Backup
-
-"""
+        return ret

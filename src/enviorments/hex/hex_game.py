@@ -34,7 +34,6 @@ class HexBoardGameState(BoardGameBaseState):
     is represented as [[a,b,d],[c,e,g],[f,h,i]]
 
     '''
-    board_size = 10
 
     def __init__(self,
                  board,
@@ -55,7 +54,6 @@ class HexBoardGameState(BoardGameBaseState):
         Updates the state hash
         """
         self.board_hash = hash(marshal.dumps(self._board_vec))
-        # self.board_hash = hash(str(self.hex_board))
 
     def change_turn(self):
         """
@@ -91,6 +89,7 @@ class HexBoardGameState(BoardGameBaseState):
         Sets the game board values.
         """
         self._board_vec[(x * self.board_size_x) + y] = val
+        self.update_state_hash()
 
     def get_as_inverted_vec(self) -> [float]:
         """
@@ -114,17 +113,6 @@ class HexBoardGameState(BoardGameBaseState):
         Returns the board size as as a list representing the board.
         """
         return [self._board_vec[n * self.board_size_x:(n + 1) * self.board_size_x] for n in range(self.board_size_x)]
-
-    @staticmethod
-    def invert_state_vec(vec,
-                         axis_size):
-        """
-        Todo - Remove? Coulnd't find any usages.
-        """
-        mod_vec = copy.deepcopy(vec)
-        for x in range(axis_size):
-            for y in range(axis_size):
-                mod_vec[(x * axis_size) + y] = vec[(x * axis_size) + y]
 
     def __hash__(self):
         return self.board_hash
@@ -338,18 +326,25 @@ def _find_winning_move(
     for node in connected:
         chek_node_value = state.get_board_val(node[0], node[1])
         if node not in checked:
-            if chek_node_value == player_board_value:
-                if node in term_nodes:
-                    # if is_trying is None:
-                    #     return (-1,-1)
-                    move = is_trying
-                else:
+            if is_trying is None:
+                # if not trying
+                if node in term_nodes and chek_node_value == 0:
+                    # check for winning
+                    return node
+                elif chek_node_value == player_board_value:
+                    # continue traverse where possible
                     move = _find_winning_move(player_board_value, state, checked, node, term_nodes, is_trying=is_trying)
-            elif chek_node_value == 0 and is_trying is None:
-                # print("hop v")
-                try_hops.append(node)
-            elif is_trying is not None and node in term_nodes:
-                return is_trying
+                elif chek_node_value == 0:
+                    # else add to traverse later list
+                    try_hops.append(node)
+            else:
+                # if currently trying
+                if node in term_nodes and chek_node_value == player_board_value:
+                    # check for winning
+                    return is_trying
+                elif chek_node_value == player_board_value:
+                    # continue traverse where possible
+                    move = _find_winning_move(player_board_value, state, checked, node, term_nodes, is_trying=is_trying)
 
             if move is not None:
                 return move
@@ -389,15 +384,20 @@ def find_winning_move(
     # print("is team 0", team_0)
     # print("term", term_nodes)
     # print("init", start_nodes)
+    try_nodes = []
     for node in start_nodes:
         if state.get_board_val(node[0], node[1]) == node_v:
             move = _find_winning_move(node_v, state, checked, node, term_nodes)
         elif state.get_board_val(node[0], node[1]) == 0:
-            move = _find_winning_move(node_v, state, checked, node, term_nodes, is_trying=node)
+            try_nodes.append(node)
 
         if move is not None:
             return move
-            break
+
+    for node in try_nodes:
+        move = _find_winning_move(node_v, state, checked, node, term_nodes, is_trying=node)
+        if move is not None:
+            return move
 
     return move
 
@@ -418,9 +418,6 @@ def _get_free_positions(state: HexBoardGameState) -> [(int)]:
 
 def _slice_active_board_from_internal(board,
                                       slice_size):
-    """
-    Todo - Figure out exactly what it does.
-    """
     sliced_board = []
     for x in range(slice_size):
         sliced_board.append(board[x][-slice_size:])
@@ -520,6 +517,7 @@ class HexGameEnvironment(BoardGameEnvironment):
             next_s.board_size_x = state.board_size_x
             next_s._board_vec = state._board_vec[:]
             next_s.players_turn = state.players_turn
+            next_s.update_state_hash()
 
         put_val = self.player_0_value if state.current_player_turn() == 0 else self.player_1_value
         x, y = action[0], action[1]
@@ -546,16 +544,6 @@ class HexGameEnvironment(BoardGameEnvironment):
             won = _is_game_won(next_s, team_0=True)
             if won:
                 reward = 1
-
-        # if _is_game_won(next_s, team_0=False):
-        #     reward = -1
-        #     won = True
-        # elif _is_game_won(next_s, team_0=True):
-        #     reward = 1
-        #     won = True
-        # else:
-        #     reward = 0
-        #     won = False
 
         return next_s, reward, won
 

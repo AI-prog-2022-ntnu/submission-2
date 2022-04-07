@@ -10,7 +10,6 @@ from enviorments.base_state import BoardGameBaseState
 # TODO: generalize
 # TODO: have not checked that this actually works at all
 from rl_agent.agent_net import BoardGameActorNeuralNetwork
-from rl_agent.critic import Critic, CriticNeuralNet
 from rl_agent.mc_tree_search import MontecarloTreeSearch
 from rl_agent.tournament_of_progressive_policies import TOPP
 from rl_agent.util import get_action_visit_map_as_target_vec, NeuralNetworkConfig
@@ -21,7 +20,6 @@ class MonteCarloTreeSearchAgent:
     def __init__(self,
                  environment: BoardGameEnvironment,
                  actor_nn_config: NeuralNetworkConfig,
-                 critic_nn_config: NeuralNetworkConfig,
                  worker_thread_count,
                  worker_fork_number,
                  exploration_c,
@@ -30,7 +28,6 @@ class MonteCarloTreeSearchAgent:
                  ):
         # TODO: implement layer config
         self.worker_fork_number = worker_fork_number
-        self.critic_nn_config = critic_nn_config
         self.actor_nn_config = actor_nn_config
         self.ms_tree_search_time = ms_tree_search_time
         self.topp_saves = topp_saves
@@ -38,7 +35,7 @@ class MonteCarloTreeSearchAgent:
         self.worker_thread_count = worker_thread_count
         self.environment = environment
         self.train_buffer: [([int], [float])] = []
-        self.max_buffer_size = 300
+        self.max_buffer_size = 100
 
         self.model: BoardGameActorNeuralNetwork = None
         self._build_network()
@@ -48,14 +45,6 @@ class MonteCarloTreeSearchAgent:
         self.loss_hist = []
 
         self.nn_input_size = self.environment.get_observation_space_size()
-
-        self.critic = Critic(
-            nn_config=self.critic_nn_config,
-            environment=self.environment,
-            input_size=self.nn_input_size,
-        )
-
-        self.critic.model.share_memory()
 
     def load_model_from_fp(self,
                            fp):
@@ -67,28 +56,19 @@ class MonteCarloTreeSearchAgent:
             model = BoardGameActorNeuralNetwork.load_model(fp, self.actor_nn_config, self.environment,
                                                            self.nn_input_size, output_size)
             self.model = model
-
-            # critic_fp = fp + "_critic"
-            # critic_model = CriticNeuralNet.load_model(critic_fp, self.actor_nn_config, self.environment,
-            #                                           self.nn_input_size)
-            # self.critic.model = critic_model
-
             self.model.share_memory()
-            self.critic.model.share_memory()
         else:
             print("#" * 10)
             print("path not found model not loaded")
             print("#" * 10)
 
-    def save_actor_critic_to_fp(self,
-                                fp):
+    def save_actor_to_fp(self,
+                         fp):
         """
-        Saves the actor critic.
+        Saves the actor
         """
         if fp is not None:
-            critic_fp = fp + "_critic"
             self.model.save_model(fp)
-            self.critic.model.save_model(critic_fp)
 
     def _build_network(self):
         """
@@ -140,7 +120,7 @@ class MonteCarloTreeSearchAgent:
         Does the Monte Carlo tree rollout and picks the action to do.
         """
         # do the montecarlo tree rollout
-        mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(root_state=current_state)
+        mc_visit_counts_map = mcts.mc_tree_search(root_state=current_state)
 
         # convert the vec to target dist
         all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
@@ -153,11 +133,10 @@ class MonteCarloTreeSearchAgent:
     def _take_game_move(self,
                         current_state,
                         mcts,
-                        replay_buffer,
-                        critic_train_set):
+                        replay_buffer):
 
         # do the montecarlo tree rollout
-        mc_visit_counts_map, critic_train_map = mcts.mc_tree_search(root_state=current_state)
+        mc_visit_counts_map = mcts.mc_tree_search(root_state=current_state)
 
         # convert the vec to target dist
         all_action_dist = get_action_visit_map_as_target_vec(self.environment, mc_visit_counts_map)
@@ -174,23 +153,17 @@ class MonteCarloTreeSearchAgent:
         if self.display:
             self.environment.display_state(next_s)
 
-        if critic_train_map is not None:
-            for state, val in critic_train_map.items():
-                critic_train_set.append((state, val))
-
         return next_s, r, game_done
 
     def run_episode(self,
                     player_2=None,
                     flip_start=False,
-                    train_critic=False,
                     ):
         """
         Runs an episode of the game.
         """
         game_done = False
         replay_buffer = []
-        critic_train_set = []
 
         mcts = MontecarloTreeSearch(
             exploration_c=self.exploration_c,
@@ -208,7 +181,7 @@ class MonteCarloTreeSearchAgent:
         torch.set_num_threads(self.worker_thread_count)
         while not game_done:
             if player_2 is None or current_state.current_player_turn() == 0:
-                current_state, r, game_done = self._take_game_move(current_state, mcts, replay_buffer, critic_train_set)
+                current_state, r, game_done = self._take_game_move(current_state, mcts, replay_buffer)
             else:
                 current_state, r, game_done = player_2(current_state)
             actual_has_won = self.environment.get_winning_player_id(current_state)
@@ -220,8 +193,6 @@ class MonteCarloTreeSearchAgent:
                 game_done = True
 
         mcts.close_helper_threads()
-        if train_critic:
-            self.critic.train_from_buffer(critic_train_set)
 
         did_win = self.environment.get_winning_player(current_state) == 0
 
@@ -263,30 +234,10 @@ class MonteCarloTreeSearchAgent:
         Plays a game against a human player in the terminal.
         """
 
-        current_state = self.environment.get_initial_state()
-
-        if random.random() > 0.5:
-            current_state.change_turn()
-
-        game_done = False
-        while not game_done:
-
-            self.environment.display_state(current_state)
-            if current_state.current_player_turn() == 0:
-                prob_dist = self.model.get_probability_distribution([current_state])[0]
-                target_val = max(prob_dist)
-                action_idx = prob_dist.index(target_val)
-                action = self.environment.get_action_space()[action_idx]
-
-                current_state, r, game_done = self.environment.act(current_state, action)
-            else:
-
-                current_state, r, game_done = self.human_move(current_state)
-        # self.run_episode(
-        #     player_2=self.human_move,
-        #     train_critic=False,
-        #     flip_start=False,
-        # )
+        self.run_episode(
+            player_2=self.human_move,
+            flip_start=False,
+        )
 
     def run_topp(self,
                  n,
@@ -347,7 +298,6 @@ class MonteCarloTreeSearchAgent:
             flip = random.random() > 0.5
             r_buf, win = self.run_episode(
                 flip_start=flip,
-                train_critic=True
             )
             self._expand_replay_buffer(r_buf)
             if win:
@@ -364,45 +314,22 @@ class MonteCarloTreeSearchAgent:
                 print()
 
             if v % 10 == 0:
-                self.save_actor_critic_to_fp(fp)
+                self.save_actor_to_fp(fp)
 
             topp.register_policy(self, v, run_tornament=True)
 
-            actor_loss = pandas.DataFrame(self.loss_hist)
-            actor_loss.to_csv(fp + "_actor_loss.csv", index=False)
-            critic_loss = pandas.DataFrame(self.critic.loss_hist)
-            critic_loss.to_csv(fp + "_critic_loss.csv", index=False)
+            if fp is not None:
+                actor_loss = pandas.DataFrame(self.loss_hist)
+                actor_loss.to_csv(fp + "_actor_loss.csv", index=False)
         print()
-        self.save_actor_critic_to_fp(fp)
+        self.save_actor_to_fp(fp)
 
     def pick_action(self,
                     state: BoardGameBaseState,
                     use_prob_not_max=False):
 
-        """
-        TODO: usikker på den her, mpt player 1/2. 
-            spørsmålet er skal man "snu brettet" hver gang man gjør et trekk for motstanderen eller skal man bare plukke det trekke som er minst gunsig for spiller 1
-            for øyeblikket tar jeg bare trekket som er minst gunsig for spiller 1 men kan være lurt og sjekke forsjellen når vi endrer dette
-        """
-
-        # if state.current_player_turn() == 0:
-        #     x = state.get_as_vec()
-        #     pass
-        # else:
-        #     x = state.get_as_inverted_vec()
-
         x = state.get_as_vec()
         prob_dist = self.model.get_probability_distribution([state])[0]
-
-        # if torch.any(torch.isnan(prob_dist)):
-        #     print("na in dist: inp: ", x)
-        #     print("na in diat: prob dist: ", prob_dist)
-        #     print("na in diat: params: ", self.model.parameters())
-        #     # prob_dist = self.model.forward(torch.tensor([x], dtype=torch.float))[0]
-        #     # print(prob_dist)
-        #
-        #     # print(self.model.network(torch.tensor([x], dtype=torch.float)))
-        #     pass
 
         # if all probs are zero pick a random value
         # TODO: implement the some action picker
@@ -417,14 +344,11 @@ class MonteCarloTreeSearchAgent:
                 action_idx = prob_dist.index(target_val)
 
             action = action_space[action_idx]
-            # else:
-            #     action_inv = self.environment.get_action_space_list()[action_idx]
-            #     action = (action_inv[1], action_inv[0])
 
         leagal_actions = self.environment.get_valid_actions(state)
         if action not in leagal_actions:
             print("Not in leagal dist:", prob_dist)
             print("Not in leagal action:", action)
             print("Not in leagal inp vec:", state.get_as_vec())
-            # print(self.model.network(torch.tensor([x], dtype=torch.float)))
+
         return action

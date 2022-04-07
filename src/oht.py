@@ -128,9 +128,14 @@ class OHTClient(ActorClient):
         # start_t = time.monotonic_ns()
         player = state[0] % 2
         used_state = self.env.get_initial_state()
-        used_state.players_turn = 0
+        used_state.players_turn = player - 1
+
+        print("us pt ", used_state.players_turn)
+        print("pt ", player)
         # print("pre", state)
         s_vec = map_board(list(state[1:]), self.env.internal_board_size, self.env.board_size, init_state=used_state, turn=player)
+
+        # used_state.players_turn = 0
         # print("post", s_vec.get_as_vec())
 
         self.env.display_state(used_state, display_internal=False)
@@ -142,10 +147,10 @@ class OHTClient(ActorClient):
         losing_move = self.env.get_state_winning_move(other_s)
 
         if winning_move is not None:
-            print("has winning")
+            print("has winning", winning_move)
             action = winning_move
         elif losing_move is not None:
-            print("has losing")
+            print("has losing", losing_move)
             action = losing_move
         else:
 
@@ -161,14 +166,6 @@ class OHTClient(ActorClient):
         x = action[0]
         y = action[1] - y_shift
 
-        # end_t = time.monotonic_ns()
-        # move_rtt = math.floor((end_t - start_t) / 1000000)
-        #
-        # print(f"Move RTT: {move_rtt}")
-        #
-        # print("CRASH ON OVERTIME ACTIVE")
-        # if move_rtt > 1000:
-        #     raise Exception("OVER_TIME")
         return y, x
 
     def handle_game_over(self,
@@ -185,19 +182,8 @@ class OHTClient(ActorClient):
         used_state = self.env.get_initial_state()
         s_vec = map_board(list(end_state[1:]), self.env.internal_board_size, self.env.board_size, init_state=used_state, turn=end_state[0])
         self.env.display_state(used_state)
-        # print(f"end state: {end_state}")
         print("game {:>3} of {:>3} win /lose: \u001b[32m{:>6}\u001b[0m / \u001b[31m{:<6}\u001b[0m".format(self.current_game_num, self.tot_games, self.p_1_wins, self.p_2_wins))
         print("\n")
-
-        # self.mcts.close_helper_threads()
-        # self.mcts = MontecarloTreeSearch(
-        #     is_training=False,
-        #     exploration_c=self.agent.exploration_c,
-        #     environment=self.agent.environment,
-        #     agent=self.agent,
-        #     worker_thread_count=self.agent.worker_thread_count,
-        #     worker_fork_number=self.agent.worker_fork_number
-        # )
 
 
 if __name__ == '__main__':
