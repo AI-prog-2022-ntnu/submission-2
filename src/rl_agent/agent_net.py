@@ -1,3 +1,4 @@
+import copy
 import math
 import time
 
@@ -21,7 +22,7 @@ class BoardGameActorNeuralNetwork(nn.Module):
         self.invert_p2 = invert_p2
         self.environment = environment
         self.output_size = output_size
-        self.nn_config = nn_config
+        self.nn_config = copy.deepcopy(nn_config)
 
         self.board_size = math.floor(math.sqrt(input_size))  # TODO: this is bad
 
@@ -40,21 +41,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
         """
         Creates the conv network model.
         """
-        # network = nn.Sequential(*self.nn_config.network_layout)
 
-        k = 20
-        layers = [nn.Conv2d(in_channels=2, out_channels=k, kernel_size=(5, 5), padding=2, stride=1)]
-        layers.append(nn.ReLU())
-
-        for n in range(5):
-            layers.append(
-                nn.Conv2d(in_channels=k, out_channels=k, kernel_size=(3, 3), padding=1, stride=1))
-            layers.append(nn.ReLU())
-
-        layers.append(nn.Conv2d(in_channels=k, out_channels=1, kernel_size=(1, 1), padding=0, stride=1))
-        layers.append(nn.Flatten())
-        print(layers)
-        network = nn.Sequential(*layers)
+        network = nn.Sequential(*self.nn_config.network_layout)
 
         def init_weights(m):
             if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):

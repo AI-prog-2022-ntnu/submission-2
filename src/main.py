@@ -29,13 +29,20 @@ def main():
         optimizer=torch.optim.Adam,
         lr=1e-3,
         network_layout=[
-            nn.Conv2d(in_channels=2, out_channels=k, kernel_size=(5, 5), padding=2, stride=3),
+            nn.Conv2d(2, 20, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
             nn.ReLU(),
-            nn.Conv2d(in_channels=k, out_channels=k, kernel_size=(3, 3), padding=2, stride=1),
+            nn.Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
             nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(k * (bs - 1) ** 2, out_features=300),
-            nn.Linear(300, bs ** 2),
+            nn.Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(20, 20, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(20, 1, kernel_size=(1, 1), stride=(1, 1)),
+            nn.Flatten(start_dim=1, end_dim=-1)
         ]
 
     )
@@ -61,12 +68,12 @@ def main():
     agent.debug = True
     agent.display = True
     agent.train_n_episodes(
-        n=100,
+        n=200,
         fp=model_fp
     )
 
     agent.run_topp(
-        n=100,
+        n=200,
         num_games=500
     )
 
