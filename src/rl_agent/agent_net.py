@@ -40,7 +40,21 @@ class BoardGameActorNeuralNetwork(nn.Module):
         """
         Creates the conv network model.
         """
-        network = nn.Sequential(*self.nn_config.network_layout)
+        # network = nn.Sequential(*self.nn_config.network_layout)
+
+        k = 20
+        layers = [nn.Conv2d(in_channels=2, out_channels=k, kernel_size=(5, 5), padding=2, stride=1)]
+        layers.append(nn.ReLU())
+
+        for n in range(5):
+            layers.append(
+                nn.Conv2d(in_channels=k, out_channels=k, kernel_size=(3, 3), padding=1, stride=1))
+            layers.append(nn.ReLU())
+
+        layers.append(nn.Conv2d(in_channels=k, out_channels=1, kernel_size=(1, 1), padding=0, stride=1))
+        layers.append(nn.Flatten())
+        print(layers)
+        network = nn.Sequential(*layers)
 
         def init_weights(m):
             if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
@@ -48,7 +62,6 @@ class BoardGameActorNeuralNetwork(nn.Module):
                 m.bias.data.fill_(0.01)
 
         network.apply(init_weights)
-
         return network
 
     def forward(self,
@@ -67,6 +80,8 @@ class BoardGameActorNeuralNetwork(nn.Module):
         p_stack = torch.stack([p1_inp, p2_inp], dim=1)
         x = p_stack.view((-1, 2, self.board_size, self.board_size))
         out: torch.Tensor = self.network(x)
+        # print(out.shape)
+        # exit()
 
         out_soft_masked = torch.zeros_like(out)
         for n in range(len(x)):
@@ -136,7 +151,6 @@ class BoardGameActorNeuralNetwork(nn.Module):
     def get_action_visit_map_as_target_vec(self,
                                            action_visit_map: {}):
         """
-        TODO: Figure out exactly what it does.
         Returns the action visit map as a target vector.
         """
         possible_actions = self.environment.get_action_space()

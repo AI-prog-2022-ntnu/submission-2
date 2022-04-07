@@ -35,7 +35,7 @@ class MonteCarloTreeSearchAgent:
         self.worker_thread_count = worker_thread_count
         self.environment = environment
         self.train_buffer: [([int], [float])] = []
-        self.max_buffer_size = 100
+        self.max_buffer_size = 500
 
         self.model: BoardGameActorNeuralNetwork = None
         self._build_network()
@@ -294,7 +294,9 @@ class MonteCarloTreeSearchAgent:
         )
 
         win_count = [0 for _ in range(50)]
-        for v in range(n):
+
+        topp.register_policy(self, 0, run_tornament=True)
+        for v in range(n + 1):
             flip = random.random() > 0.5
             r_buf, win = self.run_episode(
                 flip_start=flip,
@@ -316,7 +318,7 @@ class MonteCarloTreeSearchAgent:
             if v % 10 == 0:
                 self.save_actor_to_fp(fp)
 
-            topp.register_policy(self, v, run_tornament=True)
+            topp.register_policy(self, v + 1, run_tornament=True)
 
             if fp is not None:
                 actor_loss = pandas.DataFrame(self.loss_hist)

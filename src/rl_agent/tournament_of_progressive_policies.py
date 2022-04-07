@@ -38,6 +38,7 @@ class TOPP:
         self._save_points = [0]
         every_n = math.floor(total_itrs / num_models_to_save)
         self._save_points.extend(np.cumsum(np.repeat(every_n, num_models_to_save - 1)).tolist())
+        self._save_points.append(total_itrs)
 
         self._save_dir = "./topp_models"
         self._model_name = "topp_model_itr_{}"
@@ -65,6 +66,7 @@ class TOPP:
         prob_dist = model.get_probability_distribution([state])[0]
 
         if sum(prob_dist) == 0:
+            raise Exception()
             action = random.choice(self.environment.get_valid_actions(state))
         else:
             action_space = self.environment.get_action_space()

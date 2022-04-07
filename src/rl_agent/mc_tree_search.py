@@ -508,7 +508,7 @@ class MontecarloTreeSearch:
         self.e_greedy = EGreedy(
             init_val=0.8,
             min_val=0.0,
-            rounds_to_min=20,  # TODO: FIX IMPORTANT!
+            rounds_to_min=20,
         )
 
         if root_s_node is None:
