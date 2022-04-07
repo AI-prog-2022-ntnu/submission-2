@@ -44,8 +44,8 @@ class OHTClient(ActorClient):
 
         torch.set_num_threads(1)
         self.env = HexGameEnvironment(
-            board_size=5,
-            internal_board_size=10
+            board_size=7,
+            internal_board_size=7
         )
 
         actor_nn_config = NeuralNetworkConfig(
@@ -53,7 +53,8 @@ class OHTClient(ActorClient):
             train_iterations=0,
             data_passes=200,
             batch_size=10,
-            lr=None,
+            lr=0.02,
+            nr_layers=2,
         )
 
         critic_nn_config = NeuralNetworkConfig(
@@ -61,7 +62,8 @@ class OHTClient(ActorClient):
             train_iterations=0,
             data_passes=200,
             batch_size=10,
-            lr=None,
+            lr=0.02,
+            nr_layers=10,
         )
 
         self.agent = MonteCarloTreeSearchAgent(
@@ -126,7 +128,7 @@ class OHTClient(ActorClient):
         # start_t = time.monotonic_ns()
         player = state[0] % 2
         used_state = self.env.get_initial_state()
-        used_state.players_turn = player
+        used_state.players_turn = 0
         # print("pre", state)
         s_vec = map_board(list(state[1:]), self.env.internal_board_size, self.env.board_size, init_state=used_state, turn=player)
         # print("post", s_vec.get_as_vec())
@@ -146,6 +148,7 @@ class OHTClient(ActorClient):
             print("has losing")
             action = losing_move
         else:
+
             prob_dist = self.agent.model.get_probability_distribution([used_state])[0]
 
             target_val = max(prob_dist)
